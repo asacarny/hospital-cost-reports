@@ -3,3 +3,5 @@ sync.sh
 output/
 source/*.dta
 to-website/
+not-public/
+
