@@ -1,0 +1,5 @@
+*.log
+sync.sh
+output/
+source/*.dta
+to-website/
