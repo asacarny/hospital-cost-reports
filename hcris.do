@@ -4,7 +4,10 @@ clear
 log using hcris.log, replace
 
 global STARTYEAR = 2000
-global ENDYEAR = 2015
+global ENDYEAR = 2016
+
+* make the output folder if it doesn't exist
+capture mkdir output
 
 * import the lookup table
 import excel using misc/lookup.xlsx, firstrow
@@ -217,9 +220,25 @@ order ///
 	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
 	opancrev opoprev optotrev ///
 	tottotrev ///
-	ccr chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010  
+	ccr chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010
+
+
+compress
 
 save output/hcris_merged.dta, replace
+saveold output/hcris_merged.v11.dta, replace version(11)
+export delimited output/hcris_merged.csv, replace
+
+log close
+
+quietly {
+    log using output/hcris_merged_codebook.txt, text replace
+    noisily describe, fullnames
+    log close
+}
+
+log using hcris.log, append
+
 
 * now construct the hospital-year synthetic file
 
@@ -373,7 +392,20 @@ order ///
 	nreports nfmt96 nfmt10 nno_uncomp ///
 	frac_year_covered covg_begin_dt covg_end_dt flag_short flag_long
 
+compress
 
 save output/hcris_merged_hospyear.dta, replace
+saveold output/hcris_merged_hospyear.v11.dta, replace version(11)
+export delimited output/hcris_merged_hospyear.csv, replace
+
+log close
+
+quietly {
+    log using output/hcris_merged_hospyear_codebook.txt, text replace
+    noisily describe, fullnames
+    log close
+}
+
+log using hcris.log, append
 
 log close
