@@ -1,7 +1,7 @@
 *.log
 sync.sh
 output/
-source/*.dta
+source/
 to-website/
 not-public/
 
