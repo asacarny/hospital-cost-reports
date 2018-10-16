@@ -226,7 +226,7 @@ order ///
 compress
 
 save output/hcris_merged.dta, replace
-saveold output/hcris_merged.v11.dta, replace version(11)
+saveold output/hcris_merged.v12.dta, replace version(11)
 export delimited output/hcris_merged.csv, replace
 
 log close
@@ -395,7 +395,7 @@ order ///
 compress
 
 save output/hcris_merged_hospyear.dta, replace
-saveold output/hcris_merged_hospyear.v11.dta, replace version(11)
+saveold output/hcris_merged_hospyear.v12.dta, replace version(11)
 export delimited output/hcris_merged_hospyear.csv, replace
 
 log close
