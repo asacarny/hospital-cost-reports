@@ -4,7 +4,7 @@
 STARTYEAR=2000
 ENDYEAR=2016
 
-# choose method wget or rsync
+# choose method wget or rsync (requires NBER username)
 METHOD="rsync"
 
 if [ "$METHOD" == "wget" ]
