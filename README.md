@@ -11,7 +11,7 @@ Thus, the second dataset, `hcris_merged_hospyear.dta`, attempts to deal with thi
 
 * Cost report data is notoriously noisy and mis-measured. I strongly advise that you pre-process it to remove bizarre values, or that you use analytic methods that are less sensitive to outliers (e.g. quantile regression, trimming/winsorizing the outcome before linear regression, etc.).
 * **The uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
-* In the synthetic calendar year data, sometimes a hospital doesn't have cost reports that cover the full year period. These observations have `flag_short` set to 1. In other cases, there are overlapping cost reports during the period. These observations have `flag_long` set to 1.
+* In the synthetic calendar year data, sometimes a hospital doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
 
 # Download the processed data
 
