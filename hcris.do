@@ -3,8 +3,16 @@ capture log close
 clear
 log using hcris.log, replace
 
+* use cost reports from these years' data files
 global STARTYEAR = 2000
-global ENDYEAR = 2016
+global ENDYEAR = 2017
+
+* with files from those years, we often (~50% of hospitals) don't observe
+* reports covering the full calendar STARTYEAR. and often don't observe (~20%
+* of hospitals) reports covering the full calendar ENDYEAR.
+* so we shrink the extents of the hospital-year file.
+global STARTYEAR_HY = $STARTYEAR+1
+global ENDYEAR_HY = $ENDYEAR-1
 
 * make the output folder if it doesn't exist
 capture mkdir output
@@ -319,7 +327,7 @@ collapse ///
 
 * get rid of years outside the startyear / endyear window
 * (some reports in the endyear file run through the following year)
-drop if year < $STARTYEAR | year > $ENDYEAR
+drop if year < $STARTYEAR_HY | year > $ENDYEAR_HY
 
 gen byte flag_short = frac_year_covered<1
 gen byte flag_long = frac_year_covered>1

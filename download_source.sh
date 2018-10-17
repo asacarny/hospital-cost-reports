@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# data start and end
+# download files from these years.
+# note that for the synthetic calendar year files, the output will run from STARTYEAR+1
+# to ENDYEAR-1
 STARTYEAR=2000
-ENDYEAR=2016
+ENDYEAR=2017
 
 # choose method wget or rsync (requires NBER username)
 METHOD="rsync"
