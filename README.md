@@ -28,7 +28,7 @@ http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report
 `git clone https://github.com/asacarny/hospital-cost-reports.git`
 1. Download the source data from NBER and put it into the `source/` subfolder. You have two options for this.
 	1. Shell script: If you are on Mac/Linux/Cygwin, I made a shell script to download the files. Edit the file `download_source.sh` to set your start/end year and the method you'll use to retrieve the data (wget or rsync, though rsync will only work for those with an NBER username). Then open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
-	2. By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the "Numeric Table" (`hosp_nmrc_2552_...`) and "Report Table" (`hosp_rpt2552_...`) files for the cost report years you want.
+	2. By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the "Numeric Table" (`hosp_nmrc_2552_...`) and "Report Table" (`hosp_rpt2552_...`) Stata .dta files for the cost report years you want.
 1. Edit the `hcris.do` file so that the start/end years match the years of data you downloaded in the previous step.
 1. Open stata, change its working directory to the repository, and run `do hcris.do`
 
