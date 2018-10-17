@@ -14,12 +14,13 @@ Thus, the second dataset, `hcris_merged_hospyear.dta`, attempts to deal with thi
 
 # Download the processed data
 
-I have put the 2000-2016 processed cost report data online at the below links:
-(Includes data in Stata v15, Stata v12, and CSV formats, plus full variable descriptions for those not using Stata. Also includes listing of numeric values I assigned to question responses.)
+I have put the 2000-2016 processed cost report data online at the below links:  
+(Includes data in Stata v15, Stata v12, and CSV formats, plus full variable descriptions for those not using Stata.)
 
-Report level data (`hcris_merged.dta`): http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged.zip
+Report level data (`hcris_merged.dta`):  
+http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged.zip
 
-Synthetic calendar year by hospital level data (`hcris_merged_hospyear.dta`):
+Synthetic calendar year by hospital level data (`hcris_merged_hospyear.dta`):  
 http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged-hospyear.zip
 
 # Instructions for processing the data yourself
@@ -27,7 +28,7 @@ http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report
 `git clone https://github.com/asacarny/hospital-cost-reports.git`
 1. Download the source data from NBER and put it into the `source/` subfolder. You have two options for this.
 	1. Shell script: If you are on Mac/Linux/Cygwin, I made a shell script to download the files. Edit the file `download_source.sh` to set your start/end year and the method you'll use to retrieve the data (wget or rsync, though rsync will only work for those with an NBER username). Then open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
-	2. By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the `nmrc` ("Numeric Table") and `rpt` ("Report Table") files for the cost report years you want.
+	2. By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the "Numeric Table" and "Report Table" files for the cost report years you want.
 1. Edit the `hcris.do` file so that the start/end years match the years of data you downloaded in the previous step.
 1. Open stata, change its working directory to the repository, and run `do hcris.do`
 
