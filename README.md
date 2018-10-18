@@ -1,5 +1,5 @@
-# CMS Hospital Cost Report (HCRIS) Data 2000-2016
-Here you'll find code to process the CMS hospital cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 2000-2016. For more information on this data, see the NBER site:
+# CMS Hospital Cost Report (HCRIS) Data 2000-2017
+Here you'll find code to process the CMS hospital cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 2000-2017. For more information on this data, see the NBER site:
 
 http://www.nber.org/data/hcris.html
 
@@ -12,16 +12,17 @@ Thus, the second dataset, `hcris_merged_hospyear.dta`, attempts to deal with thi
 * Cost report data is notoriously noisy and mis-measured. I strongly advise that you pre-process it to remove bizarre values, or that you use analytic methods that are less sensitive to outliers (e.g. quantile regression, trimming/winsorizing the outcome before linear regression, etc.).
 * **The uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
 * In the synthetic calendar year data, sometimes a hospital doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
+* Because I process cost reports in the 2000-2017 files, many hospitals have incomplete calendar year 2000 and 2017 coverage. As a result, `hcris_merged_hospyear.dta` only includes calendar years 2001-2016.
 
 # Download the processed data
 
-I have put the 2000-2016 processed cost report data online at the below links:  
+I have put the processed cost report data online at the below links:  
 (Includes data in Stata v15, Stata v12, and CSV formats, plus full variable descriptions for those not using Stata.)
 
-Report level data (`hcris_merged.dta`):  
+Report level data (`hcris_merged.dta`), 2000-2017:  
 http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged.zip
 
-Synthetic calendar year by hospital level data (`hcris_merged_hospyear.dta`):  
+Synthetic calendar year by hospital level data (`hcris_merged_hospyear.dta`), 2001-2016:  
 http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged-hospyear.zip
 
 # Instructions for processing the data yourself
