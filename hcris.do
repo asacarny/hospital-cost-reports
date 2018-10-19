@@ -181,6 +181,8 @@ gen uccare_cost_harmonized = ccr*uccare_chg_harmonized
 sort pn year fy_bgn_dt fmt
 order rpt_rec_num pn year fy_bgn_dt fmt
 
+label data "cms hospital cost report data"
+
 label var year "year"
 label var fmt "report format (96=1996 10=2010)"
 label var beds_adultped "beds - adults & peds"
@@ -309,6 +311,38 @@ foreach var of varlist ccr beds_* {
 	egen `var'_wtd = wtmean(`var'), weight(frac_year_covered) by(pn year)
 }
 
+* some variables should never be missing
+foreach var of varlist ///
+	frac_year_covered nreports nfmt96 nfmt10 nno_uncomp ///
+	first_day_in_year last_day_in_year ///
+	pn year ///
+{
+	assert !missing(`var')
+}
+
+* make missing values flags so we can reset variables to missing after the
+* collapse statement
+foreach var of varlist ///
+	availbeddays_adultped ipbeddays_adultped ipdischarges_adultped ///
+	donations invinc netpatrev opexp othexp othinc income totcost ///
+	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
+	opancrev opoprev optotrev tottotrev ///
+	chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 ///
+	uccare_chg_harmonized uccare_cost_harmonized ///
+	ccr_wtd beds_*_wtd ///
+{
+	generate miss_`var' = missing(`var')
+}
+
+* for a couple vars we'll need missing flags for their min and max
+foreach var of varlist ///
+	ccr beds_total ///
+{
+	generate miss_`var'_min = missing(`var')
+	generate miss_`var'_max = missing(`var')
+
+}
+
 * down to the hospital-year level
 
 collapse ///
@@ -322,8 +356,17 @@ collapse ///
 	frac_year_covered nreports nfmt96 nfmt10 nno_uncomp ///
 	(min) covg_begin_dt=first_day_in_year ccr_min=ccr beds_total_min=beds_total ///
 	(max) covg_end_dt=last_day_in_year ccr_max=ccr beds_total_max=beds_total ///
-	(mean) ccr_wtd beds_*_wtd, ///
+	(mean) ccr_wtd beds_*_wtd ///
+	(max) miss_*, ///
 	by(pn year)
+
+* replace variables as missing if any of the embodied observations in the
+* collapsed value were missing
+foreach missvar of varlist miss_* {
+	local basevar = regexr("`missvar'","^miss_","")
+	replace `basevar' = . if `missvar'
+	drop `missvar'
+}
 
 * get rid of years outside the startyear / endyear window
 * (some reports in the endyear file run through the following year)
@@ -335,6 +378,8 @@ gen byte flag_long = frac_year_covered>1
 gen margin = (income-totcost)/income
 
 sort pn year
+
+label data "cms hospital cost report data (synthetic calendar year)"
 
 label var year "year"
 label var beds_adultped_wtd "beds - adults & peds (weighted avg over reports)"

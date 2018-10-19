@@ -13,6 +13,7 @@ Thus, the second dataset, `hcris_merged_hospyear.dta`, attempts to deal with thi
 * **The uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
 * In the synthetic calendar year data, sometimes a hospital doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
 * Because I process cost reports from 2000-2017 source files, many hospitals have incomplete calendar year 2000 and 2017 coverage (as the relevant cost reports were in 1999 or 2018 data). As a result, `hcris_merged_hospyear.dta` only includes calendar years 2001-2016.
+* Sometimes values are missing in the original cost report data. In the synthetic calendar year data, a value is set to missing if any embodied cost report had a missing value.
 
 # Download the processed data
 
