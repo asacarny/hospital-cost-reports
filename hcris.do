@@ -5,7 +5,7 @@ log using hcris.log, replace
 
 * use cost reports from these years' data files
 global STARTYEAR = 2000
-global ENDYEAR = 2017
+global ENDYEAR = 2018
 
 * with files from those years, we often (~50% of hospitals) don't observe
 * reports covering the full calendar STARTYEAR. and often don't observe (~20%
@@ -18,10 +18,38 @@ global ENDYEAR_HY = $ENDYEAR-1
 capture mkdir output
 
 * import the lookup table
-import excel using misc/lookup.xlsx, firstrow
+
+import excel using misc/lookup.xlsx, firstrow sheet("Lookup Table")
 tempfile lookup
 
 save `lookup'
+clear
+
+* variable types and labels
+import excel using misc/lookup.xlsx, firstrow sheet("Type and Label")
+
+* locals to store lists of the types of variables
+local type_dollar_flow
+local type_flow
+local type_stock
+
+qui count
+forvalues i=1/`r(N)' {
+
+	local cur_rec = rec[`i']
+	local cur_type = type[`i']
+	local LABEL_`cur_rec' = label[`i']
+	
+	* all recs are dollar flows, flows, or stocks
+	assert inlist("`cur_type'","dollar_flow","flow","stock")
+
+	* add rec to rec type list
+	local type_`cur_type' = "`type_`cur_type'' `cur_rec'"
+
+}
+
+clear
+
 
 * process each year's cost report
 
@@ -64,38 +92,15 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 		rename itm_val_num val_
 		reshape wide val, i(rpt_rec_num) j(rec) string
 		
-		// charity care vars differ between versions. create blank variables
-		
-		if (`fmt'==10 | (`fmt'==96 & `year' < 2002)) {
-			foreach var in chguccare {
-				gen val_`var' = .
-			}
-		}
-		if (`fmt'==96) {
-			foreach var in totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 {
-				gen val_`var' = .
+		// rename all the stock and flow variables
+		foreach var in `type_dollar_flow' `type_flow' `type_stock' {
+			capture confirm variable val_`var'
+			if (!_rc) {
+				rename val_`var' `var'
+
 			}
 		}
 		
-		// zero out $ variables if they were blank
-		foreach var in ///
-			netpatrev othinc opexp othexp donations invinc ///
-			iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
-			opancrev opoprev optotrev tottotrev ///
-			chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 ///
-			{
-			rename val_`var' `var'
-			replace `var' = 0 if `var'==.
-		}
-		
-		* don't zero out CCR & beds variables
-		foreach var in ///
-			ccr beds_adultped availbeddays_adultped ipbeddays_adultped ///
-			ipdischarges_adultped beds_totadultped beds_total ///
-			{
-			rename val_`var' `var'
-		}
-	
 		// save for merging into report level data
 		tempfile nmrc
 		save `nmrc', replace
@@ -120,6 +125,61 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 		}
 
 		drop _merge
+		
+		****** TBD: SHOULD WE ZERO THEM OUT?! ******
+		
+		// zero out $ variables if they were blank
+		// skip variables that are not currently defined (e.g. uncompensated
+		// care variables that weren't available in that year/format)
+		// note that in data years 2002 and 2003, this will blank out
+		// the uncompensated care charges even if the report was filed at a
+		// time when these were not supposed to be reported. we will fix this
+		// momentarily.
+		foreach var in `type_dollar_flow' {
+			capture confirm variable `var'
+			if (!_rc) {
+				replace `var' = 0 if `var'==.
+			}
+		}
+
+		// charity care vars differ between versions. create blank variables.
+		
+		// we do this after the above blanking of missing dollar
+		// flows so that the charity care variables stay missing if we had to
+		// generate them here
+		// thus e.g. for years prior to 2002, or 2010 format reports,
+		// the uncompensated care charges variable will indeed be missing
+		if (`fmt'==10 | (`fmt'==96 & `year' < 2002)) {
+			foreach var in chguccare {
+				gen `var' = .
+			}
+		}
+		// and for 1996 format reports, the uncompensated care care components
+		// introduced in the 2010 format report will be missing
+		if (`fmt'==96) {
+			foreach var in totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 {
+				gen `var' = .
+			}
+		}
+		
+		* let's re-blank the uncompensated care variable...
+		* "Complete lines 17 through 32 for cost reporting periods ending on or after April 30, 2003."
+		* - Medicare v1996 documentation section 3609.4
+		if (inlist(`year',2002,2003)) {
+			* data years 2002 and 2003 have cost reports that could in theory
+			* end before Apr 30 2003
+			* these should really have the variable set to missing but we've
+			* blanked it to zero for all reports if it was missing. fix this.
+			
+			* how often did this variable have non-zero values before
+			* it was allowed to be reported?! (shouldn't happen but does like
+			* once)
+			display "In data year `year', there were this many reports with"
+			display "non-zero uncompensated care charges before Apr 30 2003"
+			count if chguccare!=0 & fy_end_dt < mdy(4,30,2003)
+			
+			replace chguccare = . if fy_end_dt < mdy(4,30,2003)
+		}
 	
 		gen year = `year'
 		
@@ -168,6 +228,9 @@ isid rpt_rec_num
 
 rename prvdr_num pn
 
+* some dollar flow variables we generate ourselves from variables in the
+* reports
+
 gen income = netpatrev + othinc
 gen totcost = opexp + othexp
 
@@ -185,35 +248,12 @@ label data "cms hospital cost report data"
 
 label var year "year"
 label var fmt "report format (96=1996 10=2010)"
-label var beds_adultped "beds - adults & peds"
-label var availbeddays_adultped "bed days available in rpt period"
-label var ipbeddays_adultped "inpatient bed days utilized"
-label var ipdischarges_adultped "inpatient discharges"
-label var beds_totadultped "beds - total adults & peds incl swing beds"
-label var beds_total "beds - total (inc swing + spec care beds e.g. icu, ccu, nicu)"
-label var donations "donations"
-label var invinc "investment income"
-label var iphosprev "inpatient hospital revenue"
-label var ipgenrev "inpatient general revenue (total of hosp, ipf, irf, snf, etc.)"
-label var ipicrev "inpatient intensive care type revenue (total of icu, ccu, etc.)"
-label var iprcrev "inpatient routine care revenue (sum of ipgenrev and ipicrev)"
-label var ipancrev "inpatient ancillary services revenue"
-label var ipoprev "inpatient outpatient services revenue"
-label var iptotrev "inpatient total patient revenue"
-label var opancrev "outpatient ancillary services revenue"
-label var opoprev "outpatient outpatient services revenue"
-label var optotrev "outpatient total patient revenues"
-label var tottotrev "total patient revenue (sum of iptotrev and optotrev)"
-label var ccr "cost to charge ratio"
-label var chguccare "other uncompensated care charges (1996 format only)"
-label var totinitchcare "total initial obligation of patients for charity care (2010 format only)"
-label var ppaychcare "partial payment by patients approved for charity care (2010 format only)"
-label var nonmcbaddebt "non-medicare & non-reimbursable medicare bad debt expense (2010 format only)"
-label var costuccare_v2010 "cost of uncompensated care (2010 format only)"
-label var netpatrev "net patient revenues (total revenues minus allowances & discounts)"
-label var othinc "other income"
-label var opexp "total operating expenses"
-label var othexp "total other expenses"
+
+foreach var of varlist `type_dollar_flow' `type_flow' `type_stock' {
+
+	label var `var' "`LABEL_`var''"
+}
+
 label var income "total income (sum of netpatrev and othinc)"
 label var totcost "total cost (sum of opexp and othexp)"
 label var margin "total all-payer margin i.e. profit margin (income-totcost)/income"
@@ -222,16 +262,11 @@ label var uccare_cost_harmonized "uncompensated care costs (harmonized across fo
 
 order ///
 	rpt_rec_num pn year fmt fy_bgn_dt fy_end_dt rpt_stus_cd proc_dt ///
-	beds_adultped beds_totadultped beds_total ///
-	availbeddays_adultped ipbeddays_adultped ipdischarges_adultped ///
+	`type_stock' ///
+	`type_flow' ///
 	income totcost margin ///
 	uccare_chg_harmonized uccare_cost_harmonized ///
-	netpatrev othinc opexp othexp donations invinc ///
-	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
-	opancrev opoprev optotrev ///
-	tottotrev ///
-	ccr chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010
-
+	`type_dollar_flow'
 
 compress
 
@@ -284,18 +319,6 @@ drop totfrac
 * share of the target year's days that were covered by the report
 gen double frac_year_covered = days_in_year/(mdy(12,31,year)-mdy(1,1,year)+1)
 
-* scale the flows by the share of the report that was in the target year
-foreach var of varlist ///
-	availbeddays_adultped ipbeddays_adultped ipdischarges_adultped ///
-	donations invinc netpatrev opexp othexp othinc income totcost ///
-	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
-	opancrev opoprev optotrev tottotrev ///
-	chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 ///
-	uccare_chg_harmonized uccare_cost_harmonized ///
-	{
-	replace `var' = `var'*frac_rpt_in_year
-}
-
 gen nreports = 1
 gen nfmt96 = fmt==96
 gen nfmt10 = fmt==10
@@ -305,10 +328,58 @@ gen nfmt10 = fmt==10
 * - Medicare v1996 documentation section 3609.4
 gen nno_uncomp = fy_end_dt<mdy(4,30,2003)
 
-* make weighted averages of the CCR & bed counts from the reports
-* each report gets weight: fraction of target year covered
-foreach var of varlist ccr beds_* {
-	egen `var'_wtd = wtmean(`var'), weight(frac_year_covered) by(pn year)
+* collapse flow variables to the hospital-year level
+* scale them by the share of the target year's days covered by the report
+* to scale, we use the 'share target year's days covered' variable as an
+* importance weight - iweights are not normalized in collapse (sum)
+preserve
+
+collapse ///
+	(sum) ///
+	`type_flow' ///
+	`type_dollar_flow' ///
+	income totcost ///
+	uccare_chg_harmonized uccare_cost_harmonized ///
+	[iweight=frac_rpt_in_year], ///
+	by(pn year)
+
+sort pn year
+tempfile collapsed_flows
+save `collapsed_flows'
+
+restore
+
+* collapse stock variables to the hospital-year level
+* we produce three versions: weighted (by fraction of target year covered),
+* min, and max
+
+foreach stat in wtd min max {
+
+	if ("`stat'"=="wtd") {
+		local collapse_stat "mean"
+		local collapse_weight "[aweight=frac_year_covered]"
+	}
+	else {
+		local collapse_stat "`stat'"
+		local collapse_weight ""
+	}
+	
+	preserve
+	
+	collapse ///
+		(`collapse_stat') ///
+		`type_stock' ///
+		`collapse_weight', ///
+		by(pn year)
+	
+	* add postfix to the vars
+	rename (`type_stock') =_`stat'
+	
+	sort pn year
+	tempfile collapsed_stocks_`stat'
+	save `collapsed_stocks_`stat''
+	
+	restore
 }
 
 * some variables should never be missing
@@ -320,48 +391,53 @@ foreach var of varlist ///
 	assert !missing(`var')
 }
 
-* make missing values flags so we can reset variables to missing after the
-* collapse statement
+* make missing values flags so we can reset collapsed variables to missing,
+* since collapse does not track missing values
+
+* first for flow and dollar flow variables
 foreach var of varlist ///
-	availbeddays_adultped ipbeddays_adultped ipdischarges_adultped ///
-	donations invinc netpatrev opexp othexp othinc income totcost ///
-	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
-	opancrev opoprev optotrev tottotrev ///
-	chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 ///
+	`type_flow' ///
+	`type_dollar_flow' ///
+	income totcost ///
 	uccare_chg_harmonized uccare_cost_harmonized ///
-	ccr_wtd beds_*_wtd ///
 {
 	generate miss_`var' = missing(`var')
 }
 
-* for a couple vars we'll need missing flags for their min and max
-foreach var of varlist ///
-	ccr beds_total ///
-{
-	generate miss_`var'_min = missing(`var')
-	generate miss_`var'_max = missing(`var')
-
+* then for each stat of each stock variable
+foreach var of varlist `type_stock' {
+	foreach stat in wtd min max {
+		generate miss_`var'_`stat' = missing(`var')
+	}
 }
 
-* down to the hospital-year level
+
+* now go down to the hospital-year level
+* we take the report stats (e.g. frac year covered, number of reports)
+* and the missing indicators
 
 collapse ///
-	(sum) ///
-	availbeddays_adultped ipbeddays_adultped ipdischarges_adultped ///
-	donations invinc netpatrev opexp othexp othinc income totcost ///
-	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
-	opancrev opoprev optotrev tottotrev ///
-	chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 ///
-	uccare_chg_harmonized uccare_cost_harmonized ///
-	frac_year_covered nreports nfmt96 nfmt10 nno_uncomp ///
-	(min) covg_begin_dt=first_day_in_year ccr_min=ccr beds_total_min=beds_total ///
-	(max) covg_end_dt=last_day_in_year ccr_max=ccr beds_total_max=beds_total ///
-	(mean) ccr_wtd beds_*_wtd ///
+	(sum) frac_year_covered nreports nfmt96 nfmt10 nno_uncomp ///
+	(min) covg_begin_dt=first_day_in_year ///
+	(max) covg_end_dt=last_day_in_year ///
 	(max) miss_*, ///
 	by(pn year)
 
+* merge in previously collapsed flow and stock variables
+
+foreach collapsed_file in ///
+	collapsed_flows collapsed_stocks_wtd ///
+	collapsed_stocks_min collapsed_stocks_max ///
+{
+	merge 1:1 pn year using ``collapsed_file'', assert(match) nogenerate
+}
+
+* we now have, for every stock & flow var, an indicator for whether any
+* embodied observation was missing
+
 * replace variables as missing if any of the embodied observations in the
 * collapsed value were missing
+
 foreach missvar of varlist miss_* {
 	local basevar = regexr("`missvar'","^miss_","")
 	replace `basevar' = . if `missvar'
@@ -372,6 +448,8 @@ foreach missvar of varlist miss_* {
 * (some reports in the endyear file run through the following year)
 drop if year < $STARTYEAR_HY | year > $ENDYEAR_HY
 
+* indicators for whether the year was under-covered or over-covered by
+* the embodied reports
 gen byte flag_short = frac_year_covered<1
 gen byte flag_long = frac_year_covered>1
 
@@ -382,39 +460,17 @@ sort pn year
 label data "cms hospital cost report data (synthetic calendar year)"
 
 label var year "year"
-label var beds_adultped_wtd "beds - adults & peds (weighted avg over reports)"
-label var beds_totadultped_wtd "beds - total adults & peds incl swing beds (weighted avg over reports)"
-label var beds_total_wtd "beds - total (inc swing + spec care beds e.g. icu, ccu, nicu) (weighted avg over reports)"
-label var beds_total_min "beds - total (inc swing + spec care beds e.g. icu, ccu, nicu) (min of reports)"
-label var beds_total_max "beds - total (inc swing + spec care beds e.g. icu, ccu, nicu) (max of reports)"
-label var availbeddays_adultped "bed days available in rpt period"
-label var ipbeddays_adultped "inpatient bed days utilized"
-label var ipdischarges_adultped "inpatient discharges"
-label var donations "donations"
-label var invinc "investment income"
-label var iphosprev "inpatient hospital revenue"
-label var ipgenrev "inpatient general revenue (total of hosp, ipf, irf, snf, etc.)"
-label var ipicrev "inpatient intensive care type revenue (total of icu, ccu, etc.)"
-label var iprcrev "inpatient routine care revenue (sum of ipgenrev and ipicrev)"
-label var ipancrev "inpatient ancillary services revenue"
-label var ipoprev "inpatient outpatient services revenue"
-label var iptotrev "inpatient total patient revenue"
-label var opancrev "outpatient ancillary services revenue"
-label var opoprev "outpatient outpatient services revenue"
-label var optotrev "outpatient total patient revenues"
-label var tottotrev "total patient revenue (sum of iptotrev and optotrev)"
-label var ccr_wtd "cost to charge ratio (weighted avg over reports)"
-label var ccr_min "cost to charge ratio (min of reports)"
-label var ccr_max "cost to charge ratio (max of reports)"
-label var chguccare "other uncompensated care charges (1996 format only)"
-label var totinitchcare "total initial obligation of patients for charity care (2010 format only)"
-label var ppaychcare "partial payment by patients approved for charity care (2010 format only)"
-label var nonmcbaddebt "non-medicare & non-reimbursable medicare bad debt expense (2010 format only)"
-label var costuccare_v2010 "cost of uncompensated care (2010 format only)"
-label var netpatrev "net patient revenues (total revenues minus allowances & discounts)"
-label var othinc "other income"
-label var opexp "total operating expenses"
-label var othexp "total other expenses"
+
+foreach var of varlist `type_dollar_flow' `type_flow' {
+	label var `var' "`LABEL_`var''"
+}
+
+foreach base in `type_stock' {
+	label var `base'_wtd "`LABEL_`base'' (weighted avg over reports)"
+	label var `base'_min "`LABEL_`base'' (min of reports)"
+	label var `base'_max "`LABEL_`base'' (max of reports)"
+}
+
 label var income "total income (sum of netpatrev and othinc)"
 label var totcost "total cost (sum of opexp and othexp)"
 label var margin "total all-payer margin i.e. profit margin (income-totcost)/income"
@@ -431,19 +487,33 @@ label var covg_end_dt "last day in year with cost report coverage in row"
 label var flag_short "flag for fewer total days in cost reports than days in year"
 label var flag_long "flag for more total days in cost reports than days in year"
 
+* order the variables
+* by using a series of order statements and the last option, we treat the
+* order like a stack, shifting variables off the bottom of the stack and
+* pushing them onto the end. we shift all variables off so this will totally
+* re-order the stack in the order we specify
+
+* so pn year will come first, ultimately
+order pn year, last
+
+* then the stock variables
+foreach base in `type_stock' {
+	order `base'_wtd `base'_min `base'_max, last
+}
+
+* then the flow variables
 order ///
-	pn year ///
-	beds_adultped_wtd beds_totadultped_wtd beds_total_* ///
-	availbeddays_adultped ipbeddays_adultped ipdischarges_adultped ///
+	`type_flow' ///
 	income totcost margin ///
 	uccare_chg_harmonized uccare_cost_harmonized ///
-	netpatrev othinc opexp othexp donations invinc ///
-	iphosprev ipgenrev ipicrev iprcrev ipancrev ipoprev iptotrev ///
-	opancrev opoprev optotrev ///
-	tottotrev ///
-	ccr_* chguccare totinitchcare ppaychcare nonmcbaddebt costuccare_v2010 ///
+	`type_dollar_flow', ///
+	last
+
+* finally the report stats
+order ///
 	nreports nfmt96 nfmt10 nno_uncomp ///
-	frac_year_covered covg_begin_dt covg_end_dt flag_short flag_long
+	frac_year_covered covg_begin_dt covg_end_dt flag_short flag_long, ///
+	last
 
 compress
 
