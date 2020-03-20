@@ -5,7 +5,7 @@ log using hcris.log, replace
 
 * use cost reports from these years' data files
 global STARTYEAR = 2000
-global ENDYEAR = 2018
+global ENDYEAR = 2017
 
 * with files from those years, we often (~50% of hospitals) don't observe
 * reports covering the full calendar STARTYEAR. and often don't observe (~20%
