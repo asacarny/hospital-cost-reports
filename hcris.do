@@ -1,3 +1,7 @@
+* hcris.do
+* process the CMS cost reports, producing one report-level file and another
+* synthetic hospital-calendar year file
+
 set more off
 capture log close
 clear
@@ -5,7 +9,7 @@ log using hcris.log, replace
 
 * use cost reports from these years' data files
 global STARTYEAR = 2000
-global ENDYEAR = 2017
+global ENDYEAR = 2019
 
 * with files from those years, we often (~50% of hospitals) don't observe
 * reports covering the full calendar STARTYEAR. and often don't observe (~20%
@@ -13,6 +17,9 @@ global ENDYEAR = 2017
 * so we shrink the extents of the hospital-year file.
 global STARTYEAR_HY = $STARTYEAR+1
 global ENDYEAR_HY = $ENDYEAR-1
+
+* where is the source data?
+global SOURCE_BASE "./source"
 
 * make the output folder if it doesn't exist
 capture mkdir output
@@ -72,7 +79,7 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 	
 		use rpt_rec_num itm_val_num wksht_cd clmn_num line_num ///
 			if inlist(wksht_cd,"G300000","G200000","S100000","S300001") ///
-			using source/hosp_nmrc2552_`fmt'_`year'_long.dta
+			using "$SOURCE_BASE/hosp_nmrc2552_`fmt'_`year'_long.dta"
 			
 		// critical care beds can be subscripted so e.g. line 8 can have
 		// subscripts like line 8.1, 8.2, etc. these are identified by looking
@@ -203,7 +210,7 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 		clear
 	
 		// process report index file
-		use source/hosp_rpt2552_`fmt'_`year'
+		use "$SOURCE_BASE/hosp_rpt2552_`fmt'_`year'"
 		keep rpt_rec_num prvdr_num rpt_stus_cd fy_bgn_dt fy_end_dt proc_dt
 	
 		// bring in components of margins
