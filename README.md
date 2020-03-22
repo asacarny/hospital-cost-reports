@@ -31,7 +31,7 @@ http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report
 1. Download the repository using the 'Clone or download' link on github, or clone this repository with the git command:
 `git clone https://github.com/asacarny/hospital-cost-reports.git`
 1. Download the source data from NBER and put it into the `source/` subfolder. You have two options for this.
-	1. **Recommended*** Use the shell script to automatically download the files. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin.
+	1. **Recommended** Use the shell script to automatically download the files. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin.
 		- Edit the file `download_source.sh` to set your start/end year and the method you'll use to retrieve the data (`wget-cms`, `wget-nber` or `rsync-nber`). For the moment, I recommend `wget-cms`, which downloads the source data from the CMS website.
 		- The other options download from NBER, and as of my writing, those files were last updated in Mid-2018. `wget-nber` downloads the data right from the NBER website, and `rsync-nber` downloads it over rsync from NBER, which is faster especially for refreshing already-downloaded data, but will only work for those with an NBER username.
 		- Next, open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
