@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# download source HCRIS data from NBER
+# download source HCRIS data from CMS or NBER
 
 # download data for the years specified below
 # note that for the synthetic calendar year files, the output will run from STARTYEAR+1
