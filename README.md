@@ -31,13 +31,11 @@ http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report
 1. Download the repository using the 'Clone or download' link on github, or clone this repository with the git command:
 `git clone https://github.com/asacarny/hospital-cost-reports.git`
 1. Download the source data from NBER and put it into the `source/` subfolder. You have two options for this.
-	1. **Recommended*** Use the shell script to automatically download the files. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin. Edit the file `download_source.sh` to set your start/end year and the method you'll use to retrieve the data (`wget-cms`, `wget-nber` or `rsync-nber`). For the moment, I recommend `wget-cms`, which downloads the source data from the CMS website.
-
-	The other options download from NBER, and as of my writing, those files were last updated in Mid-2018. `wget-nber` downloads the data right from the NBER website, and `rsync-nber` downloads it over rsync from NBER, which is faster especially for refreshing already-downloaded data, but will only work for those with an NBER username.
-
-	Next, open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
-
-	Finally, if you chose the `wget-cms` method, you'll need to convert the files to stata format. Open stata, change its working directory to the repository, and run `do import-source-cms.do`.
+	1. **Recommended*** Use the shell script to automatically download the files. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin.
+		- Edit the file `download_source.sh` to set your start/end year and the method you'll use to retrieve the data (`wget-cms`, `wget-nber` or `rsync-nber`). For the moment, I recommend `wget-cms`, which downloads the source data from the CMS website.
+		- The other options download from NBER, and as of my writing, those files were last updated in Mid-2018. `wget-nber` downloads the data right from the NBER website, and `rsync-nber` downloads it over rsync from NBER, which is faster especially for refreshing already-downloaded data, but will only work for those with an NBER username.
+		- Next, open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
+		- Finally, if you chose the `wget-cms` method, you'll need to convert the files to stata format. Open stata, change its working directory to the repository, and run `do import-source-cms.do`.
 	1. By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the "Numeric Table" (`hosp_nmrc_2552_...`) and "Report Table" (`hosp_rpt2552_...`) Stata .dta files for the cost report years you want. NB: As of my writing, this data was last updated in mid-2018.
 1. Edit the `hcris.do` file so that the start/end years match the years of data you downloaded in the previous step.
 1. Open stata, change its working directory to the repository, and run `do hcris.do`
