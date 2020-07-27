@@ -30,6 +30,13 @@ import excel using misc/lookup.xlsx, firstrow sheet("Lookup Table")
 tempfile lookup
 
 save `lookup'
+
+* a list of worksheets we'll need - this will speed up loading the nmrc file
+tempfile worksheets
+keep wksht_cd fmt
+duplicates drop
+save `worksheets'
+
 clear
 
 * variable types and labels
@@ -76,10 +83,20 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 		// process numeric file to pull in components of margins
 		
 		display "processing hosp_nmrc2552_`fmt'_`year'_long.dta"
-	
-		use rpt_rec_num itm_val_num wksht_cd clmn_num line_num ///
-			if inlist(wksht_cd,"G300000","G200000","S100000","S300001") ///
-			using "$SOURCE_BASE/hosp_nmrc2552_`fmt'_`year'_long.dta"
+		
+		// load the list of worksheets we'll need
+		// this will speed up the loading of the nmrc file by omitting
+		// records from worksheets we aren't processing
+		use `worksheets'
+		keep if fmt==`fmt'
+		drop fmt
+		sort wksht_cd
+		isid wksht_cd
+		
+		merge 1:m wksht_cd ///
+			using "$SOURCE_BASE/hosp_nmrc2552_`fmt'_`year'_long.dta", ///
+			keep(match) ///
+			keepusing(rpt_rec_num itm_val_num wksht_cd clmn_num line_num)
 			
 		// critical care beds can be subscripted so e.g. line 8 can have
 		// subscripts like line 8.1, 8.2, etc. these are identified by looking
