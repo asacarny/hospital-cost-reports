@@ -19,7 +19,7 @@ Thus, the second dataset, `hcris_merged_hospyear.dta`, attempts to deal with thi
 # Download the processed data
 
 I have put the processed cost report data online at the below links:  
-(Includes data in Stata v15, Stata v12, and CSV formats, plus full variable descriptions for those not using Stata.)
+(Includes data in Stata v17, Stata v12, and CSV formats, plus full variable descriptions for those not using Stata.)
 
 Report level data (`hcris_merged.dta`), 1996-2021:  
 http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged.zip
