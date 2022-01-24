@@ -8,8 +8,8 @@ clear
 log using hcris.log, replace
 
 * use cost reports from these years' data files
-global STARTYEAR = 2000
-global ENDYEAR = 2019
+global STARTYEAR = 1996
+global ENDYEAR = 2021
 
 * with files from those years, we often (~50% of hospitals) don't observe
 * reports covering the full calendar STARTYEAR. and often don't observe (~20%
@@ -343,7 +343,7 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 
 }
 
-isid rpt_rec_num
+isid rpt_rec_num year
 
 rename prvdr_num pn
 
@@ -412,10 +412,10 @@ rename year hcris_year
 
 gen year_base = year(fy_bgn_dt)
 gen years_spanned = year(fy_end_dt) - year(fy_bgn_dt) + 1
-isid rpt_rec_num
+isid rpt_rec_num hcris_year
 expand years_spanned
 
-egen seq = seq(), from(0) by(rpt_rec_num)
+egen seq = seq(), from(0) by(rpt_rec_num hcris_year)
 gen year = year_base+seq
 drop year_base seq
 
@@ -431,7 +431,7 @@ gen days_spanned = fy_end_dt-fy_bgn_dt+1
 
 * share of the report's days that fell into the target year
 gen frac_rpt_in_year = days_in_year/days_spanned
-egen totfrac = sum(frac_rpt_in_year), by(rpt_rec_num)
+egen totfrac = sum(frac_rpt_in_year), by(rpt_rec_num hcris_year)
 assert totfrac==1
 drop totfrac
 

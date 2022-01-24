@@ -5,8 +5,8 @@
 # download data for the years specified below
 # note that for the synthetic calendar year files, the output will run from STARTYEAR+1
 # to ENDYEAR-1
-STARTYEAR=2000
-ENDYEAR=2019
+STARTYEAR=1996
+ENDYEAR=2021
 
 # choose download method. options
 # 1. wget-cms - download the latest HCRIS data from the CMS website
@@ -17,7 +17,7 @@ ENDYEAR=2019
 # downloading them. note if you aren't using passwordless login you'll be prompted for
 # a password for every file.
 # NB: the rsync method requires an NBER username!
-# NB: as of today (Mar 21, 2020) the NBER data was last updated mid-2018, and is now
+# NB: as of today (Jan 23, 2022) the NBER data was last updated mid-2018, and is now
 # out of date.
 
 METHOD="wget-cms"
@@ -42,10 +42,10 @@ then
 
 			unzip ${OUTFOLDER}/HOSPFY${year}.zip \
 				-d ${OUTFOLDER}/ \
-				hosp_${year}_RPT.CSV hosp_${year}_NMRC.CSV
+				HOSP_${year}_RPT.CSV HOSP_${year}_NMRC.CSV
 		
-			mv ${OUTFOLDER}/hosp_${year}_RPT.csv ${OUTFOLDER}/hosp_rpt2552_96_${year}.csv
-			mv ${OUTFOLDER}/hosp_${year}_NMRC.csv ${OUTFOLDER}/hosp_nmrc2552_96_${year}_long.csv
+			mv ${OUTFOLDER}/HOSP_${year}_RPT.CSV ${OUTFOLDER}/hosp_rpt2552_96_${year}.csv
+			mv ${OUTFOLDER}/HOSP_${year}_NMRC.CSV ${OUTFOLDER}/hosp_nmrc2552_96_${year}_long.csv
 		
 			rm ${OUTFOLDER}/HOSPFY${year}.zip
 		fi
@@ -57,10 +57,10 @@ then
 
 			unzip ${OUTFOLDER}/HOSP10FY${year}.zip \
 				-d ${OUTFOLDER}/ \
-				hosp10_${year}_RPT.CSV hosp10_${year}_NMRC.CSV
+				HOSP10_${year}_RPT.CSV HOSP10_${year}_NMRC.CSV
 		
-			mv ${OUTFOLDER}/hosp10_${year}_RPT.csv ${OUTFOLDER}/hosp_rpt2552_10_${year}.csv
-			mv ${OUTFOLDER}/hosp10_${year}_NMRC.csv ${OUTFOLDER}/hosp_nmrc2552_10_${year}_long.csv
+			mv ${OUTFOLDER}/HOSP10_${year}_RPT.CSV ${OUTFOLDER}/hosp_rpt2552_10_${year}.csv
+			mv ${OUTFOLDER}/HOSP10_${year}_NMRC.CSV ${OUTFOLDER}/hosp_nmrc2552_10_${year}_long.csv
 		
 			rm ${OUTFOLDER}/HOSP10FY${year}.zip
 		fi

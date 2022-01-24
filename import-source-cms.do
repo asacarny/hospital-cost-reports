@@ -7,8 +7,8 @@ clear
 log using import-source-cms.log, replace
 
 * process cost reports from these years' data files
-global STARTYEAR = 2000
-global ENDYEAR = 2019
+global STARTYEAR = 1996
+global ENDYEAR = 2021
 
 * where is the source data?
 global SOURCE_BASE "./source"

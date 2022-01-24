@@ -1,5 +1,5 @@
-# CMS Hospital Cost Report (HCRIS) Data 2000-2019
-Here you'll find code to process the CMS hospital cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 2000-2019. For more information on this data, see the NBER site:
+# CMS Hospital Cost Report (HCRIS) Data 1996-2021
+Here you'll find code to process the CMS hospital cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 1996-2021. For more information on this data, see the NBER site:
 
 http://www.nber.org/data/hcris.html
 
@@ -8,23 +8,23 @@ The code produces two datasets. In one, `hcris_merged.dta`, each record is a hos
 Thus, the second dataset, `hcris_merged_hospyear.dta`, attempts to deal with this by constructing synthetic calendar year data. For variables that are flows, it takes weighted sums over the cost reports, with the weights equal to the fraction of the cost report that fell into the calendar year (the weights are not normalized). For variables that are stocks or something like stocks (e.g. bed counts and the cost-to-charge ratio), it takes a weighted average, with weights equal to the fraction of the year covered by the report and normalized to sum to 1. It also takes a min and a max over the values in the reports.
 
 # Cautionary notes!
-* **2018-2019 report data is very incomplete at this time. 2018 data in the hospital-year file is incomplete for many hospitals, but is still there for those who would like to use it**. Check the `flag_short` variable (described below).
+* **2020-21 report data is very incomplete at this time. 2020 data in the hospital-year file is incomplete for many hospitals, but is still there for those who would like to use it**. Check the `flag_short` variable (described below).
 * Cost report data is notoriously noisy and mis-measured. I strongly advise that you pre-process it to remove bizarre values, or that you use analytic methods that are less sensitive to outliers (e.g. quantile regression, trimming/winsorizing the outcome before linear regression, etc.).
 * **The uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
 * In the synthetic calendar year data, sometimes a hospital doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
-* Because I process cost reports from 2000-2019 source files, many hospitals have incomplete calendar year coverage in the starting and terminal years (as the relevant cost reports were in / will be in 1999 or 2020 data). As a result, `hcris_merged_hospyear.dta` only includes calendar years 2001-2018. **Even 2018 data in the hospital-year file is incomplete for many hospitals*.
+* Because I process cost reports from 1996-2021 source files, many hospitals have incomplete calendar year coverage in the starting and terminal years (as the relevant cost reports were in / will be in 1999 or 2020 data). As a result, `hcris_merged_hospyear.dta` only includes calendar years 1997-2020. **Even 2020 data in the hospital-year file is incomplete for many hospitals*.
 * Sometimes values are missing in the original cost report data. In the synthetic calendar year data, a value is set to missing if any embodied cost report had a missing value. **Note:** dollar variables (e.g. costs, charges, etc.) are recoded to 0 in the report-level data. These values will therefore never be missing in the synthetic calendar year data, except if the reporting period or calendar year predates when hospitals were required to submit the variable. See the notes on adding new variables for more details.
-* The files here source the data right from CMS, but if you process the reports yourself you will have the option to download the data from CMS or NBER. If you decide to go with NBER, note that it hasn't been updated since mid-2018. The most recent year or two of reports are therefore missing, and if reports were amended after mid-2018, the new versions are not included. For this reason I currently recommend that anyone running this code themselves use the option that downloads the source data from CMS and not NBER.
+* The files here source the data right from CMS, but if you process the reports yourself you will have the option to download the data from CMS or NBER. If you decide to go with NBER, note that it hasn't been updated since mid-2018. The most recent years of reports are therefore missing, and if reports were amended after mid-2018, the new versions are not included. For this reason I currently recommend that anyone running this code themselves use the option that downloads the source data from CMS and not NBER.
 
 # Download the processed data
 
 I have put the processed cost report data online at the below links:  
 (Includes data in Stata v15, Stata v12, and CSV formats, plus full variable descriptions for those not using Stata.)
 
-Report level data (`hcris_merged.dta`), 2000-2019:  
+Report level data (`hcris_merged.dta`), 1996-2021:  
 http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged.zip
 
-Synthetic calendar year by hospital level data (`hcris_merged_hospyear.dta`), 2001-2018:  
+Synthetic calendar year by hospital level data (`hcris_merged_hospyear.dta`), 1997-2020:  
 http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged-hospyear.zip
 
 # Instructions for processing the data yourself
@@ -59,6 +59,8 @@ These datasets only include a handful of cost report variables. To update the co
 * Better treatment of setting variables to missing for cost reporting periods when the variables were not supposed to be submitted.
 
 # Change log
+January 19, 2022
+* Refreshed data through 2022 and added data years 1996-1999
 March 21, 2020
 * *Bug fixes*
   * If a hospital had no matching variables in the NMRC table at all (i.e. it didn't report any of the variables being loaded), its dollar flows weren't being zeroed out.
