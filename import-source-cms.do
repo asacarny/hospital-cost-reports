@@ -51,7 +51,7 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 			spec_ind ///
 			fi_rcpt_dt ///
 		using "$SOURCE_BASE/hosp_rpt2552_`fmt'_`year'.csv", ///
-			stringcols(3)
+			stringcols(3) varnames(nonames)
 		
 		// process date variables
 		tempvar temp_date
@@ -170,7 +170,7 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 			clmn_num ///
 			itm_val_num ///
 		using "$SOURCE_BASE/hosp_nmrc2552_`fmt'_`year'_long.csv", ///
-			numericcols(1 5) stringcols(2 3 4) asdouble
+			numericcols(1 5) stringcols(2 3 4) asdouble varnames(nonames)
 
 		// label the variables based on HCRIS documentation
 		label variable clmn_num "Column Number"
