@@ -25,10 +25,8 @@ global SOURCE_BASE "./source"
 capture mkdir output
 
 * import the lookup table
-
 import excel using misc/lookup.xlsx, firstrow sheet("Lookup Table")
 tempfile lookup
-
 save `lookup'
 
 * a list of worksheets we'll need - this will speed up loading the nmrc file
@@ -37,29 +35,43 @@ keep wksht_cd fmt
 duplicates drop
 save `worksheets'
 
+* save indicators for whether variables are enabled in either fmt
+use rec enabled using `lookup'
+collapse (max) enabled, by(rec) fast
+tempfile enabled
+save `enabled'
+
 clear
 
 * variable types and labels
 import excel using misc/lookup.xlsx, firstrow sheet("Type and Label")
+
+* bring in indicator for whether variable is enabled
+merge 1:1 rec using `enabled', keep(master match) nogenerate
+* if no match, assume the variable wasn't enabled
+replace enabled = 0 if missing(enabled)
 
 * locals to store lists of the types of variables
 local type_dollar_flow
 local type_flow
 local type_stock
 
+* process types & labels for each variable
 qui count
 forvalues i=1/`r(N)' {
+	* only proceed if variable is enabled
+	if (enabled[`i']) {
 
-	local cur_rec = rec[`i']
-	local cur_type = type[`i']
-	local LABEL_`cur_rec' = label[`i']
-	
-	* all recs are dollar flows, flows, or stocks
-	assert inlist("`cur_type'","dollar_flow","flow","stock")
+		local cur_rec = rec[`i']
+		local cur_type = type[`i']
+		local LABEL_`cur_rec' = label[`i']
 
-	* add rec to rec type list
-	local type_`cur_type' = "`type_`cur_type'' `cur_rec'"
+		* all recs are dollar flows, flows, or stocks
+		assert inlist("`cur_type'","dollar_flow","flow","stock")
 
+		* add rec to rec type list
+		local type_`cur_type' = "`type_`cur_type'' `cur_rec'"
+	}
 }
 
 clear
@@ -368,8 +380,8 @@ label data "cms hospital cost report data"
 label var year "year"
 label var fmt "report format (96=1996 10=2010)"
 
+* label the variables
 foreach var of varlist `type_dollar_flow' `type_flow' `type_stock' {
-
 	label var `var' "`LABEL_`var''"
 }
 
