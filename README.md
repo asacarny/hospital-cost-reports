@@ -59,7 +59,7 @@ These datasets only include a handful of cost report variables. To update the co
 
 # Change log
 May 16, 2022
-* Removed NBER option from downloader script (files too out of date)
+* Removed NBER option from downloader script (the files on NBER are quite out of date)
 * Downloader script now checks if wget and unzip are installed
 * Fixed bug where script tried to label disabled variables, which did not exist
 * Correct bug that led Stata to drop first line of CSV files
@@ -68,8 +68,10 @@ May 16, 2022
 * Added labels for disabled uncompensated care variables should they eventually be enabled.
 * Enabled cost of charity care variable
 * Refreshed data
+
 January 19, 2022
 * Refreshed data through 2022 and added data years 1996-1999
+
 March 21, 2020
 * *Bug fixes*
   * If a hospital had no matching variables in the NMRC table at all (i.e. it didn't report any of the variables being loaded), its dollar flows weren't being zeroed out.
