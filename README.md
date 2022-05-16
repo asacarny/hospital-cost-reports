@@ -30,12 +30,11 @@ http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report
 # Instructions for processing the data yourself
 1. Download the repository using the 'Clone or download' link on github, or clone this repository with the git command:
 `git clone https://github.com/asacarny/hospital-cost-reports.git`
-1. Download the source data from NBER and put it into the `source/` subfolder. You have two options for this.
-	1. **Recommended** Use the shell script to automatically download the files. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin.
-		- Edit the file `download_source.sh` to set your start/end year and the method you'll use to retrieve the data (`wget-cms`, `wget-nber` or `rsync-nber`). For the moment, I recommend `wget-cms`, which downloads the source data from the CMS website.
-		- The other options download from NBER, and as of my writing, those files were last updated in Mid-2018. `wget-nber` downloads the data right from the NBER website, and `rsync-nber` downloads it over rsync from NBER, which is faster especially for refreshing already-downloaded data, but will only work for those with an NBER username.
+1. Download the source data from CMS and put it into the `source/` subfolder. You have two options for this.
+	1. **Recommended** Use the shell script to automatically download the files from the CMS website. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin. You will need `wget` and `unzip` installed.
+		- Edit the file `download_source.sh` to set your start/end year.
 		- Next, open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
-		- Finally, if you chose the `wget-cms` method, you'll need to convert the files to stata format. Open stata, change its working directory to the repository, and run `do import-source-cms.do`.
+		- Convert the files to stata format. Edit the file `import-source-cms.do` to set the same start/end year. In Stata, change the working directory to the repository and run `do import-source-cms.do`.
 	1. By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the "Numeric Table" (`hosp_nmrc_2552_...`) and "Report Table" (`hosp_rpt2552_...`) Stata .dta files for the cost report years you want. NB: As of my writing, this data was last updated in mid-2018.
 1. Edit the `hcris.do` file so that the start/end years match the years of data you downloaded in the previous step.
 1. Open stata, change its working directory to the repository, and run `do hcris.do`
@@ -59,6 +58,16 @@ These datasets only include a handful of cost report variables. To update the co
 * Better treatment of setting variables to missing for cost reporting periods when the variables were not supposed to be submitted.
 
 # Change log
+May 16, 2022
+* Removed NBER option from downloader script (files too out of date)
+* Downloader script now checks if wget and unzip are installed
+* Fixed bug where script tried to label disabled variables, which did not exist
+* Correct bug that led Stata to drop first line of CSV files
+* Enable cost of charity care variable
+* Corrected label for nonmcbaddebt field (thank you Ken Michelson for finding this bug)
+* Added labels for disabled uncompensated care variables should they eventually be enabled.
+* Enabled cost of charity care variable
+* Refreshed data
 January 19, 2022
 * Refreshed data through 2022 and added data years 1996-1999
 March 21, 2020
