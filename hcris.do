@@ -31,8 +31,8 @@ isid wksht_cd clmn_num line_num_start line_num_end fmt, missok
 
 assert !missing(line_num_start)
 
+* make numeric versions of line_num_start and line_num_end
 replace line_num_end = line_num_start if missing(line_num_end)
-
 foreach var of varlist line_num_start line_num_end {
 	gen long `var'_int = real(`var')
 	format %05.0f `var'_int
@@ -41,9 +41,12 @@ foreach var of varlist line_num_start line_num_end {
 	rename `var'_int `var'
 }
 
+* create rows for each line, from line_num_start to line_num_end
+
 gen d = line_num_end-line_num_start+1
 assert d>=1 & !missing(d)
 
+* this is the ID for the original record
 gen long orig_n = _n
 
 expand d
@@ -55,9 +58,9 @@ gen long line_num = line_num_start+seq
 format %05.0f line_num
 drop seq
 
+* the expanded set of rows must include the stated start and end
 egen byte hits_start = max(line_num==line_num_start), by(orig_n)
 egen byte hits_end = max(line_num==line_num_end), by(orig_n)
-
 assert hits_start & hits_end
 drop hits_start hits_end line_num_start line_num_end orig_n
 
