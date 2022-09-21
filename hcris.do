@@ -25,7 +25,47 @@ global SOURCE_BASE "./source"
 capture mkdir output
 
 * import the lookup table
-import excel using misc/lookup.xlsx, firstrow sheet("Lookup Table")
+import excel using lookup.xlsx, firstrow sheet("Lookup Table")
+
+isid wksht_cd clmn_num line_num_start line_num_end fmt, missok
+
+assert !missing(line_num_start)
+
+replace line_num_end = line_num_start if missing(line_num_end)
+
+foreach var of varlist line_num_start line_num_end {
+	gen long `var'_int = real(`var')
+	format %05.0f `var'_int
+	assert `var'==string(`var'_int,"%05.0f")
+	drop `var'
+	rename `var'_int `var'
+}
+
+gen d = line_num_end-line_num_start+1
+assert d>=1 & !missing(d)
+
+gen long orig_n = _n
+
+expand d
+drop d
+
+egen int seq = seq(), from(0) by(orig_n)
+sort orig_n seq
+gen long line_num = line_num_start+seq
+format %05.0f line_num
+drop seq
+
+egen byte hits_start = max(line_num==line_num_start), by(orig_n)
+egen byte hits_end = max(line_num==line_num_end), by(orig_n)
+
+assert hits_start & hits_end
+drop hits_start hits_end line_num_start line_num_end orig_n
+
+tostring line_num, replace format("%05.0f")
+
+order wksht_cd clmn_num line_num fmt
+isid wksht_cd clmn_num line_num fmt
+
 tempfile lookup
 save `lookup'
 
@@ -44,7 +84,7 @@ save `enabled'
 clear
 
 * variable types and labels
-import excel using misc/lookup.xlsx, firstrow sheet("Type and Label")
+import excel using lookup.xlsx, firstrow sheet("Type and Label")
 
 * bring in indicator for whether variable is enabled
 merge 1:1 rec using `enabled', keep(master match) nogenerate
@@ -109,102 +149,7 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 			using "$SOURCE_BASE/hosp_nmrc2552_`fmt'_`year'_long.dta", ///
 			keep(match) ///
 			keepusing(rpt_rec_num itm_val_num wksht_cd clmn_num line_num)
-			
-		// critical care beds can be subscripted so e.g. line 8 can have
-		// subscripts like line 8.1, 8.2, etc. these are identified by looking
-		// at Worksheet A in the alphanumeric file. there are analogous rows in
-		// that worksheet which correspond to the subscripts
-		
-		// subscripts show up with line numbers like 00801, 00802 etc.
-		
-		// c.f. 2010 documentation:
-		// Cost center integrity for variable worksheets must be maintained
-		// throughout the cost report. For subscripted lines, the relative
-		// position must be consistent throughout the cost report.
-		// (See Table 3E.) [05/01/2010b]
-		// EXAMPLE: If you add a neonatal intensive care unit on line 12 of
-		// Worksheet S-3, Part I, it must also be on the first other special 
-		// care unit line of Worksheet A (line 35), Worksheet D-1, Part II
-		// (line 47), Worksheet D-2, Part I (line 7), etc.
-		
-		// also note HOSP2010_README.txt
-		// 5.2.  Extracting data for ICU; CCU: SICU; BICU; and Other ICU:  
-		// The intensive care cost centers that are reported on Worksheets S-3,
-		// Part I; G-2; D-1; and D-6 are no longer cost center coded.  You 
-		// extract the actual line number on the form.  For example, if you 
-		// want ICU beds, you should extract Worksheet Code S300001, Line
-		// Numbers 00800 through 00899, Column 00200.
-		
-		// for now, we will deal with this by hand and collapse together lines
-		// 008XX 009XX 010XX 011XX 012XX
-		// just for column 2 right now
-		
-		// c.f. 1996 documentation
-		
-		// The Intensive Care Unit cost centers are also reported on the following worksheets:
-		// S-3, Part I, Lines 6-10; D-1, Part II, Lines 43-47;  D-6, Part I, Lines 2-6; and G-2,
-		// Part I, Lines 10-14.  When extracting data for these lines, do not use the actual
-		// line number. Use the following cost center codes/line numbers when extracting data:
-		//      Intensive Care Unit:               02600-02619
-		//      Coronary Care Unit:                02700-02719
-		//      Burn Intensive Care Unit:          02800-02819
-		//      Surgical Intensive Care Unit:      02900-02919
-		//      Other Special Care Unit:           02140-02159, 02080-02099, 02060-02079,
-		//                                         02180-02199, 02040-02059, 02120-02139
-		
-		// For example, on the worksheet form the Intensive Care Cost Center is on Line 6; however, do not
-		// use Line 6, use Lines/Codes 02600 thru 02619.
-
-		// now collapse together lines 02600-02619 ... etc
-		
-		if (`fmt'==10) {
-			
-			display "collapsing together bed counts for critical care beds (2010 fmt)"
-			
-			foreach linepfx in "008" "009" "010" "011" "012" {
-				replace line_num="`linepfx'00" ///
-					if wksht_cd=="S300001" & ///
-					substr(line_num,1,3)=="`linepfx'" & ///
-					clmn_num=="00200"
-			}
-			
-		}
-		else if (`fmt'==96) {
-
-			display "collapsing together bed counts for critical care beds (1996 fmt)"
-			
-			gen linepre = substr(line_num,1,3)
-			gen linepost = real(substr(line_num,4,2))
-			assert !missing(linepost)
-			
-			foreach linepfx in "026" "027" "028" "029" {
-				replace line_num="`linepfx'00" ///
-					if wksht_cd=="S300001" & ///
-					linepre=="`linepfx'" & ///
-					inrange(linepost,0,19) & ///
-					clmn_num=="0100"
-			}
-
-			replace line_num="02140" ///
-				if wksht_cd=="S300001" & ///
-				( ///
-					( ///
-						linepre=="021" & ///
-						( inrange(linepost,20,59) | inrange(linepost,80,99) ) ///
-					) | ///
-					( ///
-						linepre=="020" & inrange(linepost,40,99) ///
-					) ///					
-				) & ///
-				clmn_num=="0100"
-			
-		}
-		
-		assert !missing(itm_val_num)
-		
-		gen count = 1
-		collapse (sum) itm_val_num count, by(rpt_rec_num wksht_cd clmn_num line_num) fast
-		
+				
 		// identify the variables we need and label the rows
 		
 		// merge with the lookup table
@@ -216,9 +161,17 @@ forvalues year=$STARTYEAR/$ENDYEAR {
 		drop if enabled==0
 		
 		drop enabled fmt
-
+		
 		keep rpt_rec_num rec itm_val_num
 
+		assert !missing(itm_val_num)
+		
+		gen count = 1
+		collapse (sum) itm_val_num count, by(rpt_rec_num rec) fast
+		
+		tab count
+		drop count
+		
 		// reshape to one row per report
 		rename itm_val_num val_
 		reshape wide val, i(rpt_rec_num) j(rec) string
@@ -367,6 +320,10 @@ gen totcost = opexp + othexp
 
 gen margin = (income-totcost)/income
 
+egen prog_chg = rowtotal( prog_rt_chg prog_net_chg )
+gen ccr_prog = prog_op_cost/prog_chg ///
+	if prog_op_cost>0 & !missing(prog_op_cost) & prog_chg>0 & !missing(prog_chg)
+
 gen uccare_chg_harmonized = chguccare if fmt==96
 replace uccare_chg_harmonized = totinitchcare-ppaychcare+nonmcbaddebt if fmt==10
 
@@ -390,11 +347,13 @@ label var totcost "total cost (sum of opexp and othexp)"
 label var margin "total all-payer margin i.e. profit margin (income-totcost)/income"
 label var uccare_chg_harmonized "uncompensated care charges (harmonized across formats)"
 label var uccare_cost_harmonized "uncompensated care costs (harmonized across formats)"
+label var prog_chg "medicare inpatient program charges (routine service + ancillary)"
+label var ccr_prog "medicare inpatient program cost to charge ratio"
 
 order ///
 	rpt_rec_num pn year fmt fy_bgn_dt fy_end_dt rpt_stus_cd proc_dt ///
-	`type_stock' ///
-	`type_flow' ///
+	`type_stock' ccr_prog ///
+	`type_flow' prog_chg ///
 	income totcost margin ///
 	uccare_chg_harmonized uccare_cost_harmonized ///
 	`type_dollar_flow'
@@ -581,10 +540,15 @@ drop if year < $STARTYEAR_HY | year > $ENDYEAR_HY
 
 * indicators for whether the year was under-covered or over-covered by
 * the embodied reports
-gen byte flag_short = frac_year_covered<1
-gen byte flag_long = frac_year_covered>1
+* use a tolerance of 0.0001 just in case there is an error due to precision
+gen byte flag_short = frac_year_covered<(1-0.0001)
+gen byte flag_long = frac_year_covered>(1+0.0001)
 
 gen margin = (income-totcost)/income
+
+egen prog_chg = rowtotal(prog_rt_chg prog_net_chg)
+gen ccr_prog = prog_op_cost/prog_chg ///
+	if prog_op_cost>0 & !missing(prog_op_cost) & prog_chg>0 & !missing(prog_chg)
 
 sort pn year
 
@@ -607,6 +571,8 @@ label var totcost "total cost (sum of opexp and othexp)"
 label var margin "total all-payer margin i.e. profit margin (income-totcost)/income"
 label var uccare_chg_harmonized "uncompensated care charges (harmonized across formats)"
 label var uccare_cost_harmonized "uncompensated care costs (harmonized across formats)"
+label var prog_chg "medicare inpatient program charges (routine service + ancillary)"
+label var ccr_prog "medicare inpatient program cost to charge ratio"
 
 label var frac_year_covered "sum of days in reports / days in year"
 label var nreports "number of cost reports included in row"
@@ -632,12 +598,14 @@ foreach base in `type_stock' {
 	order `base'_wtd `base'_min `base'_max, last
 }
 
+order ccr_prog, last
+
 * then the flow variables
 order ///
 	`type_flow' ///
 	income totcost margin ///
 	uccare_chg_harmonized uccare_cost_harmonized ///
-	`type_dollar_flow', ///
+	`type_dollar_flow' prog_chg, ///
 	last
 
 * finally the report stats
