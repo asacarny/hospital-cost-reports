@@ -6,7 +6,7 @@
 # note that for the synthetic calendar year files, the output will run from STARTYEAR+1
 # to ENDYEAR-1
 STARTYEAR=1996
-ENDYEAR=2021
+ENDYEAR=2022
 
 # where to put HCRIS files. by default store in the source folder, but since files
 # can get quite large, you might want to store them elsewhere
