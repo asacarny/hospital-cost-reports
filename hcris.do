@@ -9,7 +9,7 @@ log using hcris.log, replace
 
 * use cost reports from these years' data files
 global STARTYEAR = 1996
-global ENDYEAR = 2021
+global ENDYEAR = 2022
 
 * with files from those years, we often (~50% of hospitals) don't observe
 * reports covering the full calendar STARTYEAR. and often don't observe (~20%
@@ -89,10 +89,15 @@ clear
 * variable types and labels
 import excel using lookup.xlsx, firstrow sheet("Type and Label")
 
+gen orig_sort = _n
+
 * bring in indicator for whether variable is enabled
 merge 1:1 rec using `enabled', keep(master match) nogenerate
 * if no match, assume the variable wasn't enabled
 replace enabled = 0 if missing(enabled)
+
+* put back in the original order
+sort orig_sort
 
 * locals to store lists of the types of variables
 local type_dollar_flow
