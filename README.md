@@ -35,11 +35,12 @@ http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report
 	- Edit the file `download_source.sh` to set your start/end year.
 	- Next, open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
 	- Convert the files to stata format. Edit the file `import-source-cms.do` to set the same start/end year. In Stata, change the working directory to the repository and run `do import-source-cms.do`.
+1. Edit the `hcris.do` file so that the start/end years match the years of data you downloaded in the previous step.
+1. Open stata, change its working directory to the repository, and run `do hcris.do`
+
 <!---
 By hand: Make a folder in the repository called `source/`. Go to http://www.nber.org/data/hcris.html and download the "Numeric Table" (`hosp_nmrc_2552_...`) and "Report Table" (`hosp_rpt2552_...`) Stata .dta files for the cost report years you want.
 --->
-1. Edit the `hcris.do` file so that the start/end years match the years of data you downloaded in the previous step.
-1. Open stata, change its working directory to the repository, and run `do hcris.do`
 
 # Adding new variables
 
