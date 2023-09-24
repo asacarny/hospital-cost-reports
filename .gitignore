@@ -5,3 +5,6 @@ source/
 to-website/
 not-public/
 
+.Rproj.user
+.Rhistory
+import-*.xlsx
