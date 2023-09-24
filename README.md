@@ -1,3 +1,6 @@
+** THIS IS A DEVELOPMENT BRANCH WHERE I AM TESTING A REWRITE OF THE COST 
+REPORT CODE TO R **
+
 # CMS Hospital Cost Report (HCRIS) Data 1996-2022
 Here you'll find code to process the CMS hospital cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 1996-2022. For more information on this data, see the NBER site:
 
