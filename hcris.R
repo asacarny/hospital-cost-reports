@@ -96,7 +96,7 @@ items_wide <- function(ftype) {
   result_long <- items_long |>
     to_duckdb() |>
     inner_join(lookup_table_duckdb,by_complete) |>
-    select(rpt_rec_num,any_of("itm_val_num"),any_of("itm_val_str"),rec) |>
+    select(rpt_rec_num,fmt,any_of("itm_val_num"),any_of("itm_val_str"),rec) |>
     collect()
   
   # collapse nmrc to report-record level taking sums
@@ -108,7 +108,7 @@ items_wide <- function(ftype) {
     
     print("Collapsing to report-record level")
     result_long <- result_long |>
-      group_by(rpt_rec_num,rec) |>
+      group_by(rpt_rec_num,fmt,rec) |>
       summarize(val=sum(itm_val_num),.groups="drop")
   } else {
 
@@ -116,15 +116,15 @@ items_wide <- function(ftype) {
       stop("missing value in itm_val_str")
     }
     
-    # in alph file, report-rec must already be unique id
+    # in alph file, rpt_rec_num-fmt-rec must already be unique id
     if (
       result_long |>
-      group_by(rpt_rec_num,rec) |>
+      group_by(rpt_rec_num,fmt,rec) |>
       summarize(n=n(),.groups="keep") |>
       filter(n>1) |>
       nrow()
     ) {
-      stop("in alph file, rpt_rec_num,rec was not a unique id")
+      stop("in alph file, rpt_rec_num,fmt,rec was not a unique id")
     }
     
     result_long <- result_long |> rename(val=itm_val_str)
@@ -150,13 +150,13 @@ hcris_rpt <- rpt_pq |>
   filter(year>=START_YEAR & year<=END_YEAR) |> # limit to processing years
   left_join( # bring in numeric items
     items_nmrc,
-    join_by(rpt_rec_num),
+    join_by(rpt_rec_num,fmt),
     unmatched="error",
     relationship="one-to-one"
   ) |>
   left_join( # bring in alpha items
     items_alph,
-    join_by(rpt_rec_num),
+    join_by(rpt_rec_num,fmt),
     unmatched="error",
     relationship="one-to-one"
   ) |>
@@ -208,7 +208,7 @@ hcris_rpt <- hcris_rpt |> arrange(pn,year,fy_bgn_dt,fmt)
 # order the columns
 hcris_rpt <- hcris_rpt |>
   relocate(
-    rpt_rec_num,pn,year,fmt,fy_bgn_dt,fy_end_dt,rpt_stus_cd,proc_dt,
+    rpt_rec_num,fmt,pn,year,fy_bgn_dt,fy_end_dt,rpt_stus_cd,proc_dt,
     intersect(vars$alpha,names(hcris_rpt)),
     intersect(vars$stock,names(hcris_rpt)),ccr_prog,
     intersect(vars$flow,names(hcris_rpt)),
@@ -220,9 +220,9 @@ hcris_rpt <- hcris_rpt |>
 label_list <- split(x=type_label$label,f=type_label$rec)
 var_label(hcris_rpt) <- list(
   rpt_rec_num="Report Record Number",
+  fmt="report format (96=1996 10=2010)",
   pn="Provider Number",
   year="year",
-  fmt="report format (96=1996 10=2010)",
   fy_bgn_dt="Fiscal Year Begin Date",
   fy_end_dt="Fiscal Year End Date",
   rpt_stus_cd="Report Status Code",
