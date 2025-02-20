@@ -6,7 +6,7 @@ library(arrow)
 
 # process cost reports from these years
 START_YEAR <- 1996
-END_YEAR <- 2022
+END_YEAR <- 2024
 
 # where is the source data?
 SOURCE_BASE <- "./source"
@@ -24,9 +24,9 @@ years_10 <- (START_YEAR:END_YEAR)[START_YEAR:END_YEAR >= 2010]
 # report CSV files to load
 files_rpt_csv <- c(
   years_96 |>
-    sapply(\(y) paste(SOURCE_BASE,"/hosp_rpt2552_96_",y,".csv",sep="")),
+    map_chr(\(y) paste(SOURCE_BASE,"/hosp_rpt2552_96_",y,".csv",sep="")),
   years_10 |>
-    sapply(\(y) paste(SOURCE_BASE,"/hosp_rpt2552_10_",y,".csv",sep=""))
+    map_chr(\(y) paste(SOURCE_BASE,"/hosp_rpt2552_10_",y,".csv",sep=""))
 )
 # report parquet file to save
 file_rpt_pq = paste(STORE,"/rpt",sep="")
@@ -65,37 +65,68 @@ rpt |>
     rpt_stus_cd==5 ~ "5 Amended"
   )) |>
   mutate(filename=add_filename()) |> # fancy footwork to pull year & fmt
-  mutate(year=as.integer(str_sub(filename,-8,-4)),.before=1) |>
-  mutate(fmt=as.integer(str_sub(filename,-11,-9)),.before=2) |>
+  mutate(year=as.integer(str_sub(filename,-8,-5)),.before=1) |>
+  mutate(fmt=as.integer(str_sub(filename,-11,-10)),.before=2) |>
   select(!filename) |>
   group_by(year,fmt) |> # partiton by year and fmt
   write_dataset(path=file_rpt_pq,format="parquet")
 
-# nmrc CSV files to load
-files_nmrc_csv <- c(
-  years_96 |>
-    sapply(\(y) paste(SOURCE_BASE,"/hosp_nmrc2552_96_",y,"_long.csv",sep="")),
-  years_10 |>
-    sapply(\(y) paste(SOURCE_BASE,"/hosp_nmrc2552_10_",y,"_long.csv",sep=""))
-)
-# nmrc parquet file to save
-file_nmrc_pq = paste(STORE,"/nmrc",sep="")
+# function to process the numeric and alpha files
+process_long <- function(ftype) {
 
-# set up connection to load CSV files
-nmrc <- open_dataset(files_nmrc_csv,format="csv",schema=schema(
-  rpt_rec_num = int32(),
-  wksht_cd = string(),
-  line_num = string(),
-  clmn_num = string(),
-  itm_val_num = double()
-))
+  if (!(ftype %in% c("nmrc","alph"))) {
+    stop("ftype must be nmrc or alph")
+  }
+  
+  # nmrc/alpha CSV files to load
+  files_csv <- c(
+    years_96 |>
+      map_chr(\(y) paste(SOURCE_BASE,"/hosp_",ftype,"2552_96_",y,"_long.csv",sep="")),
+    years_10 |>
+      map_chr(\(y) paste(SOURCE_BASE,"/hosp_",ftype,"2552_10_",y,"_long.csv",sep=""))
+  )
+  
+  # parquet file to save
+  file_pq = paste(STORE,"/",ftype,sep="")
 
-# process nmrc files
-nmrc |>
-  mutate(filename=add_filename()) |> # fancy footwork to pull year & fmt
-  mutate(year=as.integer(str_sub(filename,-13,-9)),.before=1) |>
-  mutate(fmt=as.integer(str_sub(filename,-16,-14)),.before=2) |>
-  select(!filename) |>
-  group_by(year,fmt) |>
-  write_dataset(path=file_nmrc_pq,format="parquet")
+  # set up connection to load CSV files
+  
+  # the schema will depend on whether it's nmrc or alph
+  if (ftype=="nmrc") {
+    fschema <- schema(
+      rpt_rec_num = int32(),
+      wksht_cd = string(),
+      line_num = string(),
+      clmn_num = string(),
+      itm_val_num = double()
+    )
+  } else {
+    fschema <- schema(
+      rpt_rec_num = int32(),
+      wksht_cd = string(),
+      line_num = string(),
+      clmn_num = string(),
+      itm_val_str = string()
+    ) 
+  }
+  
+  # now properly open the data
+  src <- open_dataset(
+    files_csv,
+    format="csv",
+    schema=fschema
+  )
 
+  # process files
+  src |>
+    mutate(filename=add_filename()) |> # fancy footwork to pull year & fmt
+    mutate(year=as.integer(str_sub(filename,-13,-10)),.before=1) |>
+    mutate(fmt=as.integer(str_sub(filename,-16,-15)),.before=2) |>
+    select(!filename) |>
+    group_by(year,fmt) |>
+    write_dataset(path=file_pq,format="parquet")  
+}
+
+# now process the two sets of files
+process_long("nmrc")
+process_long("alph")

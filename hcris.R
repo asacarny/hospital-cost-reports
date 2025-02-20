@@ -10,7 +10,7 @@ library(labelled)
 
 # use cost reports from these years' data files
 START_YEAR <- 1996
-END_YEAR <- 2022
+END_YEAR <- 2024
 
 # with files from those years, we often (~50% of hospitals) don't observe
 # reports covering the full calendar STARTYEAR. and often don't observe (~20%
@@ -68,57 +68,103 @@ type_label <- read_excel("lookup.xlsx",sheet="Type and Label")
 type_label <- type_label |> mutate_at("type",as.factor)
 
 # vectors of the variable types
-var_types <- c("stock","flow","dollar_flow")
+var_types <- c("stock","flow","dollar_flow","alpha")
 vars <- sapply(var_types,\(v) filter(type_label,type==v)$rec)
 
-# bring in the nmrc data (values)
-nmrc_pq <- open_dataset(paste(STORE,"/nmrc",sep=""))
+items_wide <- function(ftype) {
 
-# fix up the file for merging
-nmrc_long <- nmrc_pq |>
-  filter(year>=START_YEAR & year<=END_YEAR) |> # limit to processing years
-  # some column numbers have characters, which won't convert to int. set to NA
-  mutate(clmn_num = if_else(grepl("[A-Z]",clmn_num),NA,clmn_num)) |>
-  mutate(across(c("clmn_num","line_num"),as.integer))
+  if (!(ftype %in% c("nmrc","alph"))) {
+    stop("ftype must be nmrc or alph")
+  }
 
-# merge with the lookup table
-print("Merging nmrc data with lookup table")
-by_complete <-
-  join_by(wksht_cd,clmn_num,between(line_num,line_num_start,line_num_end),fmt)
-lookup_table_duckdb <- lookup_table |> to_duckdb()
-result_long <- nmrc_long |>
-  to_duckdb() |>
-  inner_join(lookup_table_duckdb,by_complete) |>
-  select(rpt_rec_num,itm_val_num,rec) |>
-  collect()
+  # bring in the data (values)
+  items_pq <- open_dataset(paste(STORE,"/",ftype,sep=""))
+  
+  # fix up the file for merging
+  items_long <- items_pq |>
+    filter(year>=START_YEAR & year<=END_YEAR) |> # limit to processing years
+    # some column numbers have characters, which won't convert to int. set to NA
+    mutate(clmn_num = if_else(grepl("[A-Z]",clmn_num),NA,clmn_num)) |>
+    mutate(across(c("clmn_num","line_num"),as.integer))
 
-if (anyNA(result_long$itm_val_num)) {
-  stop(paste("missing value in itm_val_num in",filename))
+  # merge with the lookup table
+  print(paste0("Merging ",ftype," data with lookup table"))
+  
+  by_complete <-
+    join_by(wksht_cd,clmn_num,between(line_num,line_num_start,line_num_end),fmt)
+  lookup_table_duckdb <- lookup_table |> to_duckdb()
+  result_long <- items_long |>
+    to_duckdb() |>
+    inner_join(lookup_table_duckdb,by_complete) |>
+    select(rpt_rec_num,any_of("itm_val_num"),any_of("itm_val_str"),rec) |>
+    collect()
+  
+  # collapse nmrc to report-record level taking sums
+  if (ftype=="nmrc") {
+    
+    if (anyNA(result_long$itm_val_num)) {
+      stop("missing value in itm_val_num")
+    }
+    
+    print("Collapsing to report-record level")
+    result_long <- result_long |>
+      group_by(rpt_rec_num,rec) |>
+      summarize(val=sum(itm_val_num),.groups="drop")
+  } else {
+
+    if (anyNA(result_long$itm_val_str)) {
+      stop("missing value in itm_val_str")
+    }
+    
+    # in alph file, report-rec must already be unique id
+    if (
+      result_long |>
+      group_by(rpt_rec_num,rec) |>
+      summarize(n=n(),.groups="keep") |>
+      filter(n>1) |>
+      nrow()
+    ) {
+      stop("in alph file, rpt_rec_num,rec was not a unique id")
+    }
+    
+    result_long <- result_long |> rename(val=itm_val_str)
+  }
+  
+
+  # pivot to one row per record, reshape to one row per report, and return
+  print("Pivoting to one row per record")
+  result_long |>
+    pivot_wider(names_from=rec,values_from=val) |>
+    collect()
 }
 
-# pivot to one row per record, reshape to one row per report, and return
-print("Pivoting to one row per record")
-hcris_rpt <- result_long |>
-  group_by(rpt_rec_num,rec) |>
-  summarize(val=sum(itm_val_num),.groups="keep") |>
-  pivot_wider(names_from=rec,values_from=val) |>
-  collect()
+items_nmrc <- items_wide("nmrc")
+items_alph <- items_wide("alph")
 
 # process report index file
 rpt_pq <- open_dataset(paste(STORE,"/rpt",sep=""))
 
-# merge with the results from the numeric file
+# merge with the results from the numeric and alpha files
 print("Merging in report index file")
 hcris_rpt <- rpt_pq |>
   filter(year>=START_YEAR & year<=END_YEAR) |> # limit to processing years
-  left_join(
-    hcris_rpt,
+  left_join( # bring in numeric items
+    items_nmrc,
+    join_by(rpt_rec_num),
+    unmatched="error",
+    relationship="one-to-one"
+  ) |>
+  left_join( # bring in alpha items
+    items_alph,
     join_by(rpt_rec_num),
     unmatched="error",
     relationship="one-to-one"
   ) |>
   rename(pn=prvdr_num) |>
   collect()
+
+# now we can delete the items from nmrc/alph
+rm(items_nmrc,items_alph)
 
 print("Processing variables")
 
@@ -163,6 +209,7 @@ hcris_rpt <- hcris_rpt |> arrange(pn,year,fy_bgn_dt,fmt)
 hcris_rpt <- hcris_rpt |>
   relocate(
     rpt_rec_num,pn,year,fmt,fy_bgn_dt,fy_end_dt,rpt_stus_cd,proc_dt,
+    intersect(vars$alpha,names(hcris_rpt)),
     intersect(vars$stock,names(hcris_rpt)),ccr_prog,
     intersect(vars$flow,names(hcris_rpt)),
     intersect(vars$dollar_flow,names(hcris_rpt)),margin,
@@ -189,6 +236,7 @@ var_label(hcris_rpt) <- list(
   margin="total all-payer margin i.e. profit margin (income-totcost)/income"
 )
 var_label(hcris_rpt) <- c(
+  label_list[intersect(vars$alpha,names(hcris_rpt))],
   label_list[intersect(vars$stock,names(hcris_rpt))],
   label_list[intersect(vars$flow,names(hcris_rpt))],
   label_list[vars_zero_out]
@@ -244,9 +292,15 @@ vars_wsum_collapse <- intersect(
 )
 vars_wmean_collapse <- intersect(vars$stock,names(hcrisXyear))
 
+vars_first_collapse <- intersect(vars$alpha,names(hcrisXyear))
+
 print("Collapsing to hospital-year level")
 hcris_ayear <- hcrisXyear |>
   summarize(
+    across( # for strings, take value from first report
+      all_of(vars_first_collapse),
+      first
+    ),
     across( # scale flows by share of report that fell into year
       all_of(vars_wsum_collapse),
       ~ sum(.x*share_report_in_ayear)
@@ -261,10 +315,15 @@ hcris_ayear <- hcrisXyear |>
     ),
     # other report stats
     share_ayear_covered = sum(share_ayear_in_report),
+    flag_short = share_ayear_covered < 1,
+    flag_long = share_ayear_covered > 1,
     nreports = n(),
     nfmt96 = sum(fmt==96),
     nfmt10 = sum(fmt==10),
     covg_begin_dt = min(int_start(overlap)),
     covg_end_dt = max(int_end(overlap)),
-    .groups="keep"
+    .groups="drop"
   )
+
+print("Saving hospital-year level file")
+save(hcris_ayear,file = "output/hcris_hospyear.Rdata")

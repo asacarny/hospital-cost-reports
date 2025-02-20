@@ -6,7 +6,7 @@
 # note that for the synthetic calendar year files, the output will run from STARTYEAR+1
 # to ENDYEAR-1
 STARTYEAR=1996
-ENDYEAR=2022
+ENDYEAR=2024
 
 # where to put HCRIS files. by default store in the source folder, but since files
 # can get quite large, you might want to store them elsewhere
@@ -40,10 +40,11 @@ do
 
 		unzip ${OUTFOLDER}/HOSPFY${year}.zip \
 			-d ${OUTFOLDER}/ \
-			HOSP_${year}_RPT.CSV HOSP_${year}_NMRC.CSV
+			HOSP_${year}_RPT.CSV HOSP_${year}_NMRC.CSV HOSP_${year}_ALPHA.CSV
 	
 		mv ${OUTFOLDER}/HOSP_${year}_RPT.CSV ${OUTFOLDER}/hosp_rpt2552_96_${year}.csv
 		mv ${OUTFOLDER}/HOSP_${year}_NMRC.CSV ${OUTFOLDER}/hosp_nmrc2552_96_${year}_long.csv
+		mv ${OUTFOLDER}/HOSP_${year}_ALPHA.CSV ${OUTFOLDER}/hosp_alph2552_96_${year}_long.csv
 	
 		rm ${OUTFOLDER}/HOSPFY${year}.zip
 	fi
@@ -55,11 +56,12 @@ do
 
 		unzip ${OUTFOLDER}/HOSP10FY${year}.zip \
 			-d ${OUTFOLDER}/ \
-			HOSP10_${year}_RPT.CSV HOSP10_${year}_NMRC.CSV
+			HOSP10_${year}_RPT.CSV HOSP10_${year}_NMRC.CSV HOSP10_${year}_ALPHA.CSV
 	
 		mv ${OUTFOLDER}/HOSP10_${year}_RPT.CSV ${OUTFOLDER}/hosp_rpt2552_10_${year}.csv
 		mv ${OUTFOLDER}/HOSP10_${year}_NMRC.CSV ${OUTFOLDER}/hosp_nmrc2552_10_${year}_long.csv
-	
+		mv ${OUTFOLDER}/HOSP10_${year}_ALPHA.CSV ${OUTFOLDER}/hosp_alph2552_10_${year}_long.csv
+		
 		rm ${OUTFOLDER}/HOSP10FY${year}.zip
 	fi
 done
