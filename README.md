@@ -23,14 +23,11 @@ Thus, the second dataset, `hcris_merged_hospyear.Rdata`, attempts to deal with t
 
 # Download the processed data
 
-I have put the processed cost report data online at the below links:  
-(Includes data in R, Stata, and CSV formats.)
+The processed cost report data is online at:
 
-Report level data (`hcris_merged.R`), 1996-2024:  
-http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged.zip
+http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report.zip
 
-Synthetic calendar year by hospital level data (`hcris_merged_hospyear.R`), 1997-2023:  
-http://sacarny.com/public-files/hospital-cost-report/latest/hospital-cost-report-merged-hospyear.zip
+Includes report level data (`hcris_rpt.Rdata`), 1996-2024 and synthetic calendar year by hospital level data (`hcris_hospyear.Rdata`), 1997-2023. Files in R, Stata, and CSV formats.
 
 # Instructions for processing the data yourself
 1. Download the repository using the 'Clone or download' link on github, or clone this repository with the git command:
