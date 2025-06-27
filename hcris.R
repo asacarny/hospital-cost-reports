@@ -7,6 +7,7 @@ library(arrow)
 library(duckdb)
 library(readxl)
 library(labelled)
+library(haven)
 
 # use cost reports from these years' data files
 START_YEAR <- 1996
@@ -163,6 +164,14 @@ hcris_rpt <- rpt_pq |>
   rename(pn=prvdr_num) |>
   collect()
 
+# typ_control can show up as nmrc in 96 and alph in 10
+# turn it back into one column
+if (has_name(hcris_rpt,"typ_control.x") & has_name(hcris_rpt,"typ_control.y")) {
+  hcris_rpt <- hcris_rpt |>
+    mutate(typ_control = coalesce(typ_control.x,as.numeric(typ_control.y))) |>
+    select(-starts_with("typ_control."))
+}
+
 # now we can delete the items from nmrc/alph
 rm(items_nmrc,items_alph)
 
@@ -252,6 +261,11 @@ var_label(hcris_rpt) <- labels.was.na
 
 print("Saving report level file")
 save(hcris_rpt,file = "output/hcris_rpt.Rdata")
+write_csv(hcris_rpt,"output/hcris_rpt.csv")
+# to save as stata, remove periods from colnames
+hcris_rpt |>
+  rename_with(~ gsub("\\.","_",.x)) |>
+  write_dta("output/hcris_rpt.dta")
 
 # now construct the hospital-year synthetic file
 
@@ -313,6 +327,15 @@ hcris_ayear <- hcrisXyear |>
       all_of(paste(vars_zero_out,".was.na",sep="")),
       sum
     ),
+    # recalculate medicare ip ccr. note this is calculated differently
+    # from `ccr` (hospitalwide ccr), which in this file is a weighted average
+    # of report-level ccr's!
+    ccr_prog = if_else(
+      prog_op_cost > 0 & prog_chg > 0 & 
+        !is.na(prog_op_cost) & !is.na(prog_chg),
+      prog_op_cost/prog_chg,
+      NA
+    ),
     # other report stats
     share_ayear_covered = sum(share_ayear_in_report),
     flag_short = share_ayear_covered < 1,
@@ -325,5 +348,56 @@ hcris_ayear <- hcrisXyear |>
     .groups="drop"
   )
 
+# order the columns
+hcris_ayear <- hcris_ayear |>
+  relocate(
+    pn,ayear,
+    intersect(vars$alpha,names(hcris_ayear)),
+    intersect(vars$stock,names(hcris_ayear)),ccr_prog,
+    intersect(vars$flow,names(hcris_ayear)),
+    intersect(vars$dollar_flow,names(hcris_ayear)),
+    paste(vars_zero_out,".was.na",sep=""),
+    share_ayear_covered, flag_short, flag_long,
+    nreports, nfmt96, nfmt10,
+    covg_begin_dt, covg_end_dt
+  )
+
+# label the variables
+
+# variables specific to the synthetic year file
+var_label(hcris_ayear) <- list(
+  ayear="Synthetic year",
+  share_ayear_covered="sum of days in reports in year / days in year",
+  flag_short="flag for fewer total days in cost reports than days in year",
+  flag_long="flag for more total days in cost reports than days in year",
+  nreports="number of cost reports included in row",
+  nfmt96="number of 1996 format cost reports included in row",
+  nfmt10="number of 2010 format cost reports included in row",
+  covg_begin_dt="first day in year with cost report coverage in row",
+  covg_end_dt="last day in year with cost report coverage in row"
+)
+
+# for variables in both report and synthetic year file, pull labels
+# from report file
+common_names <- 
+  intersect(names(hcris_rpt),names(hcris_ayear)) |>
+  grep(pattern="\\.was\\.na$",value=TRUE,invert=TRUE) # remove .was.na
+# apply to synthetic file
+rpt_labels <- var_label(hcris_rpt)
+var_label(hcris_ayear) <- rpt_labels[common_names]
+
+# Now deal with .was.na variables, which get a diff label here
+labels.was.na <- sapply(
+  names(hcris_ayear) |> grep(pattern="\\.was\\.na$",value=TRUE),
+  \(v) paste("No. of embodied reports where",v,"originally missing"),
+  simplify=FALSE
+)
+var_label(hcris_ayear) <- labels.was.na
+
 print("Saving hospital-year level file")
 save(hcris_ayear,file = "output/hcris_hospyear.Rdata")
+write_csv(hcris_ayear,"output/hcris_hospyear.csv")
+# to save as stata, remove periods from colnames
+hcris_ayear |>
+  rename_with(~ gsub("\\.","_",.x)) |>
+  write_dta("output/hcris_hospyear.dta")
