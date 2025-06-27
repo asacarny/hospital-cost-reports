@@ -19,7 +19,7 @@ dir.create(STORE, showWarnings = FALSE)
 
 # years with 96 and 10 format data
 years_96 <- intersect(START_YEAR:END_YEAR,1996:2011)
-years_10 <- (START_YEAR:END_YEAR)[START_YEAR:END_YEAR >= 2010]
+years_10 <- setdiff(START_YEAR:END_YEAR,1996:2009)
 
 # report CSV files to load
 files_rpt_csv <- c(
