@@ -13,12 +13,12 @@ Thus, the second dataset, `hcris_merged_hospyear.Rdata`, attempts to deal with t
 
 # Cautionary notes!
 * **The reports for the most recent year of data are typically very incomplete!**
-* **The hospital-year records for the most recent year or two of the data are typically very incomplete!** These records are still available in the file. Check the `flag_short` variable (described below).
+* **The hospital-year records for the most recent year or two of the data may be very incomplete!** These records are still available in the file. Check the `flag_short` variable (described below).
 * Cost report data is notoriously noisy and mis-measured. I strongly advise that you pre-process it to remove bizarre values, or that you use analytic methods that are less sensitive to outliers (e.g. quantile regression, trimming/winsorizing the outcome before linear regression, etc.).
 * **The uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
 * The data includes my best attempt to calculate the Medicare inpatient operating cost-to-charge ratio (`ccr_prog`), but I give no guarantees it's correct.
 * In the synthetic calendar year data, sometimes a hospital doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
-* Because I process cost reports from 1996-2024 source files, many hospitals have incomplete calendar year coverage in the starting and terminal years (as the relevant cost reports were in / will be in 1995 or 2025 data). As a result, `hcris_merged_hospyear.dta` only includes calendar years 1997-2023. *2023 data in the hospital-year file is still very incomplete*.
+* Because I process cost reports from 1996-2024 source files, many hospitals have incomplete calendar year coverage in the starting and terminal years (as the relevant cost reports were in / will be in 1995 or 2025 data). As a result, `hcris_merged_hospyear.dta` only includes calendar years 1997-2023. *2023 data in the hospital-year file is about 5% incomplete*.
 * Sometimes values are missing in the original cost report data. In the synthetic calendar year data, a value is set to NA if any embodied cost report had a missing value. **Note:** dollar variables (e.g. costs, charges, etc.) are recoded to 0 in the report-level data. These values will therefore never be missing in the synthetic calendar year data. See the notes on adding new variables for more details.
 
 # Download the processed data
