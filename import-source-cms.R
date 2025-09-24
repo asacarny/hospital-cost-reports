@@ -4,9 +4,15 @@
 library(tidyverse)
 library(arrow)
 
+# last year cost reports are available
+FINAL_YEAR <- 2024
+
 # process cost reports from these years
-START_YEAR <- 1996
-END_YEAR <- 2024
+REPORT_EXTENTS <- tribble(
+  ~ptype,  ~start_year,  ~end_year,
+  "hosp",     1996,         2024,
+  "snf",      1995,         2024
+)
 
 # where is the source data?
 SOURCE_BASE <- "./source"
@@ -14,20 +20,77 @@ SOURCE_BASE <- "./source"
 # where to save the parquet?
 STORE <- "./store"
 
+####################################################
+
+if (
+  REPORT_EXTENTS |> 
+  filter(end_year>FINAL_YEAR) |>
+  nrow()
+) {
+  stop("You're requesting report years after FINAL_YEAR")
+}
+
 # make the parquet folder if it doesn't exist
 dir.create(STORE, showWarnings = FALSE)
 
-# years with 96 and 10 format data
-years_96 <- intersect(START_YEAR:END_YEAR,1996:2011)
-years_10 <- setdiff(START_YEAR:END_YEAR,1996:2009)
+# all potential cost report files
+file_master_list <- bind_rows(
+  tibble( # 1996 format hospital files
+    ptype="hosp",
+    year=1996:2011,
+    file=paste(
+      SOURCE_BASE,
+      "/hosp_rpt2552_96_",
+      1996:2011,
+      ".csv",
+      sep=""
+    )
+  ),
+  tibble( # 2010 format hospital files
+    ptype="hosp",
+    year=2010:FINAL_YEAR,
+    file=paste(
+      SOURCE_BASE,
+      "/hosp_rpt2552_10_",
+      2010:FINAL_YEAR,
+      ".csv",
+      sep=""
+    )
+  ),
+  tibble( # 1996 format SNF files
+    ptype="snf",
+    year=1995:2012,
+    file=paste(
+      SOURCE_BASE,
+      "/snf_rpt2540_96_",
+      1995:2012,
+      ".csv",
+      sep=""
+    )
+  ),
+  tibble( # 2010 format SNF files
+    ptype="snf",
+    year=2011:FINAL_YEAR,
+    file=paste(
+      SOURCE_BASE,
+      "/snf_rpt2540_10_",
+      2011:FINAL_YEAR,
+      ".csv",
+      sep=""
+    )
+  )
+)
 
 # report CSV files to load
-files_rpt_csv <- c(
-  years_96 |>
-    map_chr(\(y) paste(SOURCE_BASE,"/hosp_rpt2552_96_",y,".csv",sep="")),
-  years_10 |>
-    map_chr(\(y) paste(SOURCE_BASE,"/hosp_rpt2552_10_",y,".csv",sep=""))
-)
+files_rpt_csv <- file_master_list |>
+  inner_join(
+    REPORT_EXTENTS,
+    join_by(ptype,between(year,start_year,end_year)),
+    unmatched=c("drop","error"),
+    relationship="many-to-one"
+  ) |>
+  pull(file)
+
 # report parquet file to save
 file_rpt_pq = paste(STORE,"/rpt",sep="")
 
@@ -64,11 +127,12 @@ rpt |>
     rpt_stus_cd==4 ~ "4 Reopened",
     rpt_stus_cd==5 ~ "5 Amended"
   )) |>
-  mutate(filename=add_filename()) |> # fancy footwork to pull year & fmt
+  mutate(filename=add_filename()) |> # fancy footwork to pull year, fmt, ptype
   mutate(year=as.integer(str_sub(filename,-8,-5)),.before=1) |>
   mutate(fmt=as.integer(str_sub(filename,-11,-10)),.before=2) |>
+  mutate(ptype=str_remove(str_sub(filename,-24,-21),"/"),.before=3) |>
   select(!filename) |>
-  group_by(year,fmt) |> # partiton by year and fmt
+  group_by(year,fmt,ptype) |> # partiton by year, fmt, ptype
   write_dataset(path=file_rpt_pq,format="parquet")
 
 # function to process the numeric and alpha files
@@ -78,13 +142,10 @@ process_long <- function(ftype) {
     stop("ftype must be nmrc or alph")
   }
   
-  # nmrc/alpha CSV files to load
-  files_csv <- c(
-    years_96 |>
-      map_chr(\(y) paste(SOURCE_BASE,"/hosp_",ftype,"2552_96_",y,"_long.csv",sep="")),
-    years_10 |>
-      map_chr(\(y) paste(SOURCE_BASE,"/hosp_",ftype,"2552_10_",y,"_long.csv",sep=""))
-  )
+  # nmrc/alpha CSV files to load. draw on report file list
+  files_csv <- files_rpt_csv |>
+    str_replace("_rpt",paste0("_",ftype)) |> # _rpt to _nmrc/_alph
+    str_replace("\\.csv","_long.csv") # .csv to _long.csv
   
   # parquet file to save
   file_pq = paste(STORE,"/",ftype,sep="")
@@ -119,11 +180,12 @@ process_long <- function(ftype) {
 
   # process files
   src |>
-    mutate(filename=add_filename()) |> # fancy footwork to pull year & fmt
+    mutate(filename=add_filename()) |> # fancy footwork to pull year, fmt, ptype
     mutate(year=as.integer(str_sub(filename,-13,-10)),.before=1) |>
     mutate(fmt=as.integer(str_sub(filename,-16,-15)),.before=2) |>
+    mutate(ptype=str_remove(str_sub(filename,-30,-27),"/"),.before=3) |>
     select(!filename) |>
-    group_by(year,fmt) |>
+    group_by(year,fmt,ptype) |>
     write_dataset(path=file_pq,format="parquet")  
 }
 
