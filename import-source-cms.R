@@ -35,51 +35,29 @@ dir.create(STORE, showWarnings = FALSE)
 
 # all potential cost report files
 file_master_list <- bind_rows(
-  tibble( # 1996 format hospital files
-    ptype="hosp",
-    year=1996:2011,
-    file=paste(
-      SOURCE_BASE,
-      "/hosp_rpt2552_96_",
-      1996:2011,
-      ".csv",
-      sep=""
+    tibble( # 1996 format hospital files
+      ptype="hosp",year=1996:2011,fmt="96"
+    ),
+    tibble( # 2010 format hospital files
+      ptype="hosp",year=2010:FINAL_YEAR,fmt="10"
+    ),
+    tibble( # 1996 format SNF files
+      ptype="snf",year=1995:2012,fmt="96"
+    ),
+    tibble( # 2010 format SNF files
+      ptype="snf",year=2011:FINAL_YEAR,fmt="10"
     )
-  ),
-  tibble( # 2010 format hospital files
-    ptype="hosp",
-    year=2010:FINAL_YEAR,
-    file=paste(
-      SOURCE_BASE,
-      "/hosp_rpt2552_10_",
-      2010:FINAL_YEAR,
-      ".csv",
-      sep=""
-    )
-  ),
-  tibble( # 1996 format SNF files
-    ptype="snf",
-    year=1995:2012,
-    file=paste(
-      SOURCE_BASE,
-      "/snf_rpt2540_96_",
-      1995:2012,
-      ".csv",
-      sep=""
-    )
-  ),
-  tibble( # 2010 format SNF files
-    ptype="snf",
-    year=2011:FINAL_YEAR,
-    file=paste(
-      SOURCE_BASE,
-      "/snf_rpt2540_10_",
-      2011:FINAL_YEAR,
-      ".csv",
-      sep=""
+  ) |>
+  mutate( # generate file names
+    file=paste0(
+      SOURCE_BASE,"/",ptype,"_rpt",
+      case_when(
+        ptype=="hosp" ~ "2552",
+        ptype=="snf"  ~ "2540"
+      ),
+      "_",fmt,"_",year,".csv"
     )
   )
-)
 
 # report CSV files to load
 files_rpt_csv <- file_master_list |>
