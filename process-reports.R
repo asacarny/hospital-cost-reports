@@ -1,4 +1,4 @@
-# hcris.R
+# process-reports.R
 # process the CMS cost reports, producing one report-level file and another
 # synthetic provider-calendar year file
 
