@@ -1,47 +1,35 @@
 # hcris.R
 # process the CMS cost reports, producing one report-level file and another
-# synthetic hospital-calendar year file
+# synthetic provider-calendar year file
 
 library(tidyverse)
 library(arrow)
-library(duckdb)
 library(readxl)
 library(labelled)
 library(haven)
 
-# use cost reports from these years' data files
-START_YEAR <- 1996
-END_YEAR <- 2024
+source("config.R")
 
 # with files from those years, we often (~50% of hospitals) don't observe
 # reports covering the full calendar STARTYEAR. and often don't observe (~20%
 # of hospitals) reports covering the full calendar ENDYEAR.
 # so we shrink the extents of the hospital-year file.
-START_AYEAR <- START_YEAR+1
-END_AYEAR <- END_YEAR-1
-
-# function to determine when a hospital-year starts. assume calendar year:
-START_AYEAR_DATE <- function (y) { make_date(y,1,1) }
-END_AYEAR_DATE <- function (y) { make_date(y,12,31) }
-
-# this would do federal fiscal years
-#AYEAR_START_DATE <- function (y) { make_date(y-1,10,1) }
-#AYEAR_END_DATE <- function (y) { make_date(y,9,30) }
-
-
-# where are the parquets?
-STORE <- "./store"
+REPORT_EXTENTS <- REPORT_EXTENTS |>
+  mutate(
+    start_ayear=start_year+1,
+    end_ayear=end_year-1    
+  )
 
 # make the output folder if it doesn't exist
 dir.create("./output", showWarnings = FALSE)
 
 # import the lookup table
-print("Importing the lookup table")
+cat("Importing the lookup table\n")
 lookup_table <- read_excel("lookup.xlsx",sheet="Lookup Table")
 
 if (
   lookup_table |> 
-    select(wksht_cd,clmn_num,line_num_start,line_num_end,fmt) |> 
+    select(ptype,fmt,wksht_cd,clmn_num,line_num_start,line_num_end) |> 
     anyDuplicated()
 ) {
   stop("duplicates in lookup table")
@@ -64,15 +52,17 @@ lookup_table <- lookup_table |>
 lookup_table <- lookup_table |>
   filter(enabled)
 
+# make records for each line number
+lookup_table <- lookup_table |>
+  mutate(line_num=map2(line_num_start,line_num_end,seq)) |>
+  unnest(line_num) |>
+  select(-c(line_num_start,line_num_end))
+
 # variable types and labels
 type_label <- read_excel("lookup.xlsx",sheet="Type and Label")
 type_label <- type_label |> mutate_at("type",as.factor)
 
-# vectors of the variable types
-var_types <- c("stock","flow","dollar_flow","alpha")
-vars <- sapply(var_types,\(v) filter(type_label,type==v)$rec)
-
-items_wide <- function(ftype) {
+items_wide <- function(ptype,ftype,start_year,end_year) {
 
   if (!(ftype %in% c("nmrc","alph"))) {
     stop("ftype must be nmrc or alph")
@@ -83,20 +73,28 @@ items_wide <- function(ftype) {
   
   # fix up the file for merging
   items_long <- items_pq |>
-    filter(year>=START_YEAR & year<=END_YEAR) |> # limit to processing years
+    filter(
+      ptype==!!ptype,
+      between(year,start_year,end_year) # limit to processing years
+    ) |>
     # some column numbers have characters, which won't convert to int. set to NA
     mutate(clmn_num = if_else(grepl("[A-Z]",clmn_num),NA,clmn_num)) |>
     mutate(across(c("clmn_num","line_num"),as.integer))
 
   # merge with the lookup table
-  print(paste0("Merging ",ftype," data with lookup table"))
+  cat(paste0("Merging ",ftype," data with lookup table\n"))
   
   by_complete <-
-    join_by(wksht_cd,clmn_num,between(line_num,line_num_start,line_num_end),fmt)
-  lookup_table_duckdb <- lookup_table |> to_duckdb()
+    join_by(
+      ptype,
+      wksht_cd,
+      clmn_num,
+      line_num,
+      fmt
+    )
+  lookup_table_arrow <- lookup_table |> arrow_table()
   result_long <- items_long |>
-    to_duckdb() |>
-    inner_join(lookup_table_duckdb,by_complete) |>
+    inner_join(lookup_table_arrow,by_complete) |>
     select(rpt_rec_num,fmt,any_of("itm_val_num"),any_of("itm_val_str"),rec) |>
     collect()
   
@@ -107,7 +105,7 @@ items_wide <- function(ftype) {
       stop("missing value in itm_val_num")
     }
     
-    print("Collapsing to report-record level")
+    cat("Collapsing to report-record level\n")
     result_long <- result_long |>
       group_by(rpt_rec_num,fmt,rec) |>
       summarize(val=sum(itm_val_num),.groups="drop")
@@ -133,271 +131,335 @@ items_wide <- function(ftype) {
   
 
   # pivot to one row per record, reshape to one row per report, and return
-  print("Pivoting to one row per record")
+  cat("Pivoting to one row per record\n")
   result_long |>
     pivot_wider(names_from=rec,values_from=val) |>
     collect()
 }
 
-items_nmrc <- items_wide("nmrc")
-items_alph <- items_wide("alph")
-
-# process report index file
-rpt_pq <- open_dataset(paste(STORE,"/rpt",sep=""))
-
-# merge with the results from the numeric and alpha files
-print("Merging in report index file")
-hcris_rpt <- rpt_pq |>
-  filter(year>=START_YEAR & year<=END_YEAR) |> # limit to processing years
-  left_join( # bring in numeric items
-    items_nmrc,
-    join_by(rpt_rec_num,fmt),
-    unmatched="error",
-    relationship="one-to-one"
-  ) |>
-  left_join( # bring in alpha items
-    items_alph,
-    join_by(rpt_rec_num,fmt),
-    unmatched="error",
-    relationship="one-to-one"
-  ) |>
-  rename(pn=prvdr_num) |>
-  collect()
-
-# typ_control can show up as nmrc in 96 and alph in 10
-# turn it back into one column
-if (has_name(hcris_rpt,"typ_control.x") & has_name(hcris_rpt,"typ_control.y")) {
-  hcris_rpt <- hcris_rpt |>
-    mutate(typ_control = coalesce(typ_control.x,as.numeric(typ_control.y))) |>
-    select(-starts_with("typ_control."))
-}
-
-# now we can delete the items from nmrc/alph
-rm(items_nmrc,items_alph)
-
-print("Processing variables")
-
-# zero out $ variables if they were blank and make indicators for doing so
-vars_zero_out <- intersect(vars$dollar_flow,names(hcris_rpt))
-hcris_rpt <- hcris_rpt |>
-  mutate(across(all_of(vars_zero_out),is.na,.names="{.col}.was.na")) |>
-  mutate(across(all_of(vars_zero_out),~ coalesce(.x,0)))
-
-# make rpt_stus_cd a factor
-hcris_rpt <- hcris_rpt |>
-  mutate(rpt_stus_cd = as.factor(rpt_stus_cd))
-
-# add some dollar flow vars we generate ourselves
-hcris_rpt <- hcris_rpt |>
-  mutate(
-    income = netpatrev+othinc,
-    totcost = opexp+othexp,
-    margin = (income-totcost)/income,
-    prog_chg = prog_rt_chg+prog_net_chg,
-    ccr_prog = if_else(
-      prog_op_cost > 0 & prog_chg > 0,
-      prog_op_cost/prog_chg,
-      NA
-    ),
-    uccare_chg_harmonized = case_when(
-      fmt==96 ~ chguccare,
-      fmt==10 ~ totinitchcare-ppaychcare+nonmcbaddebt,
-      .default=NA
-    ),
-    uccare_cost_harmonized = ccr*uccare_chg_harmonized
-  )
-vars$dollar_flow <- vars$dollar_flow |>
-  c("income","totcost","prog_chg",
-    "uccare_chg_harmonized","uccare_cost_harmonized"
-  )
-
-# sort the data
-hcris_rpt <- hcris_rpt |> arrange(pn,year,fy_bgn_dt,fmt)
-
-# order the columns
-hcris_rpt <- hcris_rpt |>
-  relocate(
-    rpt_rec_num,fmt,pn,year,fy_bgn_dt,fy_end_dt,rpt_stus_cd,proc_dt,
-    intersect(vars$alpha,names(hcris_rpt)),
-    intersect(vars$stock,names(hcris_rpt)),ccr_prog,
-    intersect(vars$flow,names(hcris_rpt)),
-    intersect(vars$dollar_flow,names(hcris_rpt)),margin,
-    paste(vars_zero_out,".was.na",sep="")
-)
-
-# label the variables
-label_list <- split(x=type_label$label,f=type_label$rec)
-var_label(hcris_rpt) <- list(
-  rpt_rec_num="Report Record Number",
-  fmt="report format (96=1996 10=2010)",
-  pn="Provider Number",
-  year="year",
-  fy_bgn_dt="Fiscal Year Begin Date",
-  fy_end_dt="Fiscal Year End Date",
-  rpt_stus_cd="Report Status Code",
-  proc_dt="Process Date",
-  ccr_prog="medicare inpatient program cost to charge ratio",
-  income="total income (sum of netpatrev and othinc)",
-  totcost="total cost (sum of opexp and othexp)",
-  prog_chg="medicare inpatient program charges (routine service + ancillary)",
-  uccare_chg_harmonized="uncompensated care charges (harmonized across formats)",
-  uccare_cost_harmonized="uncompensated care costs (harmonized across formats)",
-  margin="total all-payer margin i.e. profit margin (income-totcost)/income"
-)
-var_label(hcris_rpt) <- c(
-  label_list[intersect(vars$alpha,names(hcris_rpt))],
-  label_list[intersect(vars$stock,names(hcris_rpt))],
-  label_list[intersect(vars$flow,names(hcris_rpt))],
-  label_list[vars_zero_out]
-)
-
-labels.was.na <- sapply(
-  vars_zero_out,
-  \(v) paste("Was",v,"originally missing"),
-  simplify=FALSE
-)
-names(labels.was.na) <- paste(names(labels.was.na),".was.na",sep="")
-var_label(hcris_rpt) <- labels.was.na
-
-print("Saving report level file")
-save(hcris_rpt,file = "output/hcris_rpt.Rdata")
-write_csv(hcris_rpt,"output/hcris_rpt.csv")
-# to save as stata, remove periods from colnames
-hcris_rpt |>
-  rename_with(~ gsub("\\.","_",.x)) |>
-  write_dta("output/hcris_rpt.dta")
-
-# now construct the hospital-year synthetic file
-
-# list of hospital-years to be merged with the report data
-ayears <- 
-  tibble(ayear=START_AYEAR:END_AYEAR) |>
-  mutate(
-    ayear_start = START_AYEAR_DATE(ayear),
-    ayear_end = END_AYEAR_DATE(ayear)
-  )
-#|> as.data.table()
-
-# merge together the files
-print("Interacting reports with coverage years")
-by_overlap <- join_by(overlaps(fy_bgn_dt,fy_end_dt,ayear_start,ayear_end))
-hcrisXyear <- hcris_rpt |>
-  rename(fyear=year) |>
-  inner_join(ayears,by_overlap)
-
-# calculate relevant variables to conduct apportionment of report to years
-hcrisXyear <- hcrisXyear |>
-  mutate(
-      report_interval = interval(fy_bgn_dt,fy_end_dt),
-      ayear_interval = interval(ayear_start,ayear_end),
-      overlap = intersect(report_interval,ayear_interval),
-      days_in_report = report_interval/days(1) + 1,
-      days_in_ayear = ayear_interval/days(1) + 1,
-      days_overlap = overlap/days(1) + 1,
-      share_report_in_ayear = days_overlap/days_in_report,
-      share_ayear_in_report = days_overlap/days_in_ayear
-  ) |>
-  group_by(pn,ayear)
+process_ptype <- function(ptype) {
   
+  cat(paste0("> Processing HCRIS for ",ptype,"\n"))
 
-vars_wsum_collapse <- intersect(
-  union(vars$flow,vars$dollar_flow),
-  names(hcrisXyear)
-)
-vars_wmean_collapse <- intersect(vars$stock,names(hcrisXyear))
+  # vectors of the variable types
+  var_types <- c("stock","flow","dollar_flow","alpha")
+  vars <- sapply(var_types,\(v) filter(type_label,ptype==!!ptype,type==v)$rec)
 
-vars_first_collapse <- intersect(vars$alpha,names(hcrisXyear))
+  # start and end year of the ptype
+  ptype_extent <- REPORT_EXTENTS |> filter(ptype==!!ptype)
+  start_year <- ptype_extent$start_year
+  end_year <- ptype_extent$end_year
 
-print("Collapsing to hospital-year level")
-hcris_ayear <- hcrisXyear |>
-  summarize(
-    across( # for strings, take value from first report
-      all_of(vars_first_collapse),
-      first
-    ),
-    across( # scale flows by share of report that fell into year
-      all_of(vars_wsum_collapse),
-      ~ sum(.x*share_report_in_ayear)
-    ),
-    across( # weight stocks by share of the year that fell into report
-      all_of(vars_wmean_collapse),
-      ~ weighted.mean(.x,share_ayear_in_report)
-    ),
-    across( # count number of missings zeroed out
-      all_of(paste(vars_zero_out,".was.na",sep="")),
-      sum
-    ),
+  # pull numeric and alpha items
+  items_nmrc <- items_wide(ptype,"nmrc",start_year,end_year)
+  items_alph <- items_wide(ptype,"alph",start_year,end_year)
+
+  # process report index file
+  rpt_pq <- open_dataset(paste(STORE,"/rpt",sep=""))
+
+  # merge with the results from the numeric and alpha files
+  cat("Merging in report index file\n")
+  hcris_rpt <- rpt_pq |>
+    filter(
+      ptype==!!ptype,
+      between(year,start_year,end_year) # limit to processing years
+    ) |> 
+    collect() |> # pull reports into tibble (alph and nmrc already tibbles)
+    left_join( # bring in numeric items
+      items_nmrc,
+      join_by(rpt_rec_num,fmt),
+      unmatched="error",
+      relationship="one-to-one"
+    ) |>
+    left_join( # bring in alpha items
+      items_alph,
+      join_by(rpt_rec_num,fmt),
+      unmatched="error",
+      relationship="one-to-one"
+    ) |>
+    rename(pn=prvdr_num) |>
+    select(-ptype)
+
+  # typ_control can show up as nmrc in 96 and alph in 10
+  # turn it back into one column
+  if (has_name(hcris_rpt,"typ_control.x") & has_name(hcris_rpt,"typ_control.y")) {
+    hcris_rpt <- hcris_rpt |>
+      mutate(typ_control = coalesce(typ_control.x,as.numeric(typ_control.y))) |>
+      select(-starts_with("typ_control."))
+  }
+
+  # now we can delete the items from nmrc/alph
+  rm(items_nmrc,items_alph)
+
+  cat("Processing variables\n")
+
+  # zero out $ variables if they were blank and make indicators for doing so
+  vars_zero_out <- intersect(vars$dollar_flow,names(hcris_rpt))
+  hcris_rpt <- hcris_rpt |>
+    mutate(across(all_of(vars_zero_out),is.na,.names="{.col}.was.na")) |>
+    mutate(across(all_of(vars_zero_out),~ coalesce(.x,0)))
+
+  # make rpt_stus_cd a factor
+  hcris_rpt <- hcris_rpt |>
+    mutate(rpt_stus_cd = as.factor(rpt_stus_cd))
+  
+  # add some dollar flows we generate ourselves
+  hcris_rpt <- hcris_rpt |>
+    mutate(
+      income = netpatrev+othinc,
+      totcost = opexp+othexp,
+      margin = (income-totcost)/income
+    )
+  vars$dollar_flow <- vars$dollar_flow |> c("income","totcost")
+
+  # add some that are specific to hospitals
+  if (ptype=="hosp") {
+    hcris_rpt <- hcris_rpt |>
+      mutate(
+        prog_chg = prog_rt_chg+prog_net_chg,
+        ccr_prog = if_else(
+          prog_op_cost > 0 & prog_chg > 0,
+          prog_op_cost/prog_chg,
+          NA
+        ),
+        uccare_chg_harmonized = case_when(
+          fmt==96 ~ chguccare,
+          fmt==10 ~ totinitchcare-ppaychcare+nonmcbaddebt,
+          .default=NA
+        ),
+        uccare_cost_harmonized = ccr*uccare_chg_harmonized
+      )
+    vars$dollar_flow <- vars$dollar_flow |>
+      c("prog_chg","uccare_chg_harmonized","uccare_cost_harmonized")
+  }
+
+  # sort the data
+  hcris_rpt <- hcris_rpt |> arrange(pn,year,fy_bgn_dt,fmt)
+
+  # order the columns
+  hcris_rpt <- hcris_rpt |>
+    relocate(
+      rpt_rec_num,fmt,pn,year,fy_bgn_dt,fy_end_dt,rpt_stus_cd,proc_dt,
+      intersect(vars$alpha,names(hcris_rpt)),
+      intersect(vars$stock,names(hcris_rpt)),any_of("ccr_prog"),
+      intersect(vars$flow,names(hcris_rpt)),
+      intersect(vars$dollar_flow,names(hcris_rpt)),any_of("margin"),
+      paste(vars_zero_out,".was.na",sep="")
+  )
+
+  # label the variables
+  type_label_ptype <- type_label |> filter(ptype==!!ptype)
+  label_list <- split(
+    x=type_label_ptype$label,
+    f=type_label_ptype$rec
+  )
+  var_label(hcris_rpt) <- list(
+    rpt_rec_num="Report Record Number",
+    fmt="report format (96=1996 10=2010)",
+    pn="Provider Number",
+    year="year",
+    fy_bgn_dt="Fiscal Year Begin Date",
+    fy_end_dt="Fiscal Year End Date",
+    rpt_stus_cd="Report Status Code",
+    proc_dt="Process Date"
+  )
+  var_label(hcris_rpt) <- c(
+    label_list[intersect(vars$alpha,names(hcris_rpt))],
+    label_list[intersect(vars$stock,names(hcris_rpt))],
+    label_list[intersect(vars$flow,names(hcris_rpt))],
+    label_list[vars_zero_out]
+  )
+  
+  var_label(hcris_rpt) <- list(
+    income="total income (sum of netpatrev and othinc)",
+    totcost="total cost (sum of opexp and othexp)",
+    margin="total all-payer margin i.e. profit margin (income-totcost)/income"
+  )
+
+  # labels for vars specific to hosp
+  if (ptype=="hosp") {
+    var_label(hcris_rpt) <- list(
+      ccr_prog="medicare inpatient program cost to charge ratio",
+      prog_chg="medicare inpatient program charges (routine service + ancillary)",
+      uccare_chg_harmonized="uncompensated care charges (harmonized across formats)",
+      uccare_cost_harmonized="uncompensated care costs (harmonized across formats)"
+    )
+  }
+
+  labels.was.na <- sapply(
+    vars_zero_out,
+    \(v) paste("Was",v,"originally missing"),
+    simplify=FALSE
+  )
+  names(labels.was.na) <- paste(names(labels.was.na),".was.na",sep="")
+  var_label(hcris_rpt) <- labels.was.na
+
+  cat("Saving report level file\n")
+  save(
+    hcris_rpt,
+    file = paste0("output/",ptype,"_rpt.Rdata")
+  )
+  write_csv(
+    hcris_rpt,
+    paste0("output/",ptype,"_rpt.csv")
+  )
+  # to save as stata, remove periods from colnames
+  hcris_rpt |>
+    rename_with(~ gsub("\\.","_",.x)) |>
+    write_dta(paste0("output/",ptype,"_rpt.dta"))
+
+  # now construct the provider-year synthetic file
+
+  # start and end *ayear* of the ptype
+  start_ayear <- ptype_extent$start_ayear
+  end_ayear <- ptype_extent$end_ayear
+
+  # list of provider-years to be merged with the report data
+  ayears <- 
+    tibble(ayear=start_ayear:end_ayear) |>
+    mutate(
+      ayear_start = START_AYEAR_DATE(ayear),
+      ayear_end = END_AYEAR_DATE(ayear)
+    )
+  # merge together the files
+  cat("Interacting reports with coverage years\n")
+  by_overlap <- join_by(overlaps(fy_bgn_dt,fy_end_dt,ayear_start,ayear_end))
+  hcrisXyear <- hcris_rpt |>
+    rename(fyear=year) |>
+    inner_join(ayears,by_overlap)
+
+  # calculate relevant variables to conduct apportionment of report to years
+  hcrisXyear <- hcrisXyear |>
+    mutate(
+        report_interval = interval(fy_bgn_dt,fy_end_dt),
+        ayear_interval = interval(ayear_start,ayear_end),
+        overlap = intersect(report_interval,ayear_interval),
+        days_in_report = report_interval/days(1) + 1,
+        days_in_ayear = ayear_interval/days(1) + 1,
+        days_overlap = overlap/days(1) + 1,
+        share_report_in_ayear = days_overlap/days_in_report,
+        share_ayear_in_report = days_overlap/days_in_ayear
+    ) |>
+    group_by(pn,ayear)
+    
+
+  vars_wsum_collapse <- intersect(
+    union(vars$flow,vars$dollar_flow),
+    names(hcrisXyear)
+  )
+  vars_wmean_collapse <- intersect(vars$stock,names(hcrisXyear))
+
+  vars_first_collapse <- intersect(vars$alpha,names(hcrisXyear))
+
+  cat("Collapsing to provider-year level\n")
+  hcris_ayear <- hcrisXyear |>
+    summarize(
+      across( # for strings, take value from first report
+        all_of(vars_first_collapse),
+        first
+      ),
+      across( # scale flows by share of report that fell into year
+        all_of(vars_wsum_collapse),
+        ~ sum(.x*share_report_in_ayear)
+      ),
+      across( # weight stocks by share of the year that fell into report
+        all_of(vars_wmean_collapse),
+        ~ weighted.mean(.x,share_ayear_in_report)
+      ),
+      across( # count number of missings zeroed out
+        all_of(paste(vars_zero_out,".was.na",sep="")),
+        sum
+      ),
+      # other report stats
+      share_ayear_covered = sum(share_ayear_in_report),
+      flag_short = share_ayear_covered < 1,
+      flag_long = share_ayear_covered > 1,
+      nreports = n(),
+      nfmt96 = sum(fmt==96),
+      nfmt10 = sum(fmt==10),
+      covg_begin_dt = as.Date(min(int_start(overlap))),
+      covg_end_dt = as.Date(max(int_end(overlap))),
+      .groups="drop"
+    )
+
+  if (ptype=="hosp") {
+    # for hospitals:
     # recalculate medicare ip ccr. note this is calculated differently
     # from `ccr` (hospitalwide ccr), which in this file is a weighted average
     # of report-level ccr's!
-    ccr_prog = if_else(
-      prog_op_cost > 0 & prog_chg > 0 & 
-        !is.na(prog_op_cost) & !is.na(prog_chg),
-      prog_op_cost/prog_chg,
-      NA
-    ),
-    # other report stats
-    share_ayear_covered = sum(share_ayear_in_report),
-    flag_short = share_ayear_covered < 1,
-    flag_long = share_ayear_covered > 1,
-    nreports = n(),
-    nfmt96 = sum(fmt==96),
-    nfmt10 = sum(fmt==10),
-    covg_begin_dt = min(int_start(overlap)),
-    covg_end_dt = max(int_end(overlap)),
-    .groups="drop"
+    hcris_ayear <- hcris_ayear |>
+      mutate(
+        ccr_prog = if_else(
+          prog_op_cost > 0 & prog_chg > 0 & 
+            !is.na(prog_op_cost) & !is.na(prog_chg),
+          prog_op_cost/prog_chg,
+          NA
+        )
+      )
+  }
+
+  # order the columns
+  hcris_ayear <- hcris_ayear |>
+    relocate(
+      pn,ayear,
+      intersect(vars$alpha,names(hcris_ayear)),
+      intersect(vars$stock,names(hcris_ayear)),any_of("ccr_prog"),
+      intersect(vars$flow,names(hcris_ayear)),
+      intersect(vars$dollar_flow,names(hcris_ayear)),
+      paste(vars_zero_out,".was.na",sep=""),
+      share_ayear_covered, flag_short, flag_long,
+      nreports, nfmt96, nfmt10,
+      covg_begin_dt, covg_end_dt
+    )
+
+  # label the variables
+
+  # variables specific to the synthetic year file
+  var_label(hcris_ayear) <- list(
+    ayear="Synthetic year",
+    share_ayear_covered="sum of days in reports in year / days in year",
+    flag_short="flag for fewer total days in cost reports than days in year",
+    flag_long="flag for more total days in cost reports than days in year",
+    nreports="number of cost reports included in row",
+    nfmt96="number of 1996 format cost reports included in row",
+    nfmt10="number of 2010 format cost reports included in row",
+    covg_begin_dt="first day in year with cost report coverage in row",
+    covg_end_dt="last day in year with cost report coverage in row"
   )
 
-# order the columns
-hcris_ayear <- hcris_ayear |>
-  relocate(
-    pn,ayear,
-    intersect(vars$alpha,names(hcris_ayear)),
-    intersect(vars$stock,names(hcris_ayear)),ccr_prog,
-    intersect(vars$flow,names(hcris_ayear)),
-    intersect(vars$dollar_flow,names(hcris_ayear)),
-    paste(vars_zero_out,".was.na",sep=""),
-    share_ayear_covered, flag_short, flag_long,
-    nreports, nfmt96, nfmt10,
-    covg_begin_dt, covg_end_dt
+  # for variables in both report and synthetic year file, pull labels
+  # from report file
+  common_names <- 
+    intersect(names(hcris_rpt),names(hcris_ayear)) |>
+    grep(pattern="\\.was\\.na$",value=TRUE,invert=TRUE) # remove .was.na
+  # apply to synthetic file
+  rpt_labels <- var_label(hcris_rpt)
+  var_label(hcris_ayear) <- rpt_labels[common_names]
+
+  # Now deal with .was.na variables, which get a diff label here
+  labels.was.na <- sapply(
+    names(hcris_ayear) |> grep(pattern="\\.was\\.na$",value=TRUE),
+    \(v) paste("No. of embodied reports where",v,"originally missing"),
+    simplify=FALSE
   )
+  var_label(hcris_ayear) <- labels.was.na
 
-# label the variables
+  cat("Saving provider-year level file\n")
+  save(
+    hcris_ayear,
+    file = paste0("output/",ptype,"_year.Rdata")
+  )
+  write_csv(
+    hcris_ayear,
+    paste0("output/",ptype,"_year.csv")
+  )
+  # to save as stata, remove periods from colnames
+  hcris_ayear |>
+    rename_with(~ gsub("\\.","_",.x)) |>
+    write_dta(paste0("output/",ptype,"_year.dta"))
 
-# variables specific to the synthetic year file
-var_label(hcris_ayear) <- list(
-  ayear="Synthetic year",
-  share_ayear_covered="sum of days in reports in year / days in year",
-  flag_short="flag for fewer total days in cost reports than days in year",
-  flag_long="flag for more total days in cost reports than days in year",
-  nreports="number of cost reports included in row",
-  nfmt96="number of 1996 format cost reports included in row",
-  nfmt10="number of 2010 format cost reports included in row",
-  covg_begin_dt="first day in year with cost report coverage in row",
-  covg_end_dt="last day in year with cost report coverage in row"
-)
+}
 
-# for variables in both report and synthetic year file, pull labels
-# from report file
-common_names <- 
-  intersect(names(hcris_rpt),names(hcris_ayear)) |>
-  grep(pattern="\\.was\\.na$",value=TRUE,invert=TRUE) # remove .was.na
-# apply to synthetic file
-rpt_labels <- var_label(hcris_rpt)
-var_label(hcris_ayear) <- rpt_labels[common_names]
+REPORT_EXTENTS$ptype |>
+  map(process_ptype)
 
-# Now deal with .was.na variables, which get a diff label here
-labels.was.na <- sapply(
-  names(hcris_ayear) |> grep(pattern="\\.was\\.na$",value=TRUE),
-  \(v) paste("No. of embodied reports where",v,"originally missing"),
-  simplify=FALSE
-)
-var_label(hcris_ayear) <- labels.was.na
-
-print("Saving hospital-year level file")
-save(hcris_ayear,file = "output/hcris_hospyear.Rdata")
-write_csv(hcris_ayear,"output/hcris_hospyear.csv")
-# to save as stata, remove periods from colnames
-hcris_ayear |>
-  rename_with(~ gsub("\\.","_",.x)) |>
-  write_dta("output/hcris_hospyear.dta")

@@ -4,23 +4,7 @@
 library(tidyverse)
 library(arrow)
 
-# last year cost reports are available
-FINAL_YEAR <- 2024
-
-# process cost reports from these years
-REPORT_EXTENTS <- tribble(
-  ~ptype,  ~start_year,  ~end_year,
-  "hosp",     1996,         2024,
-  "snf",      1995,         2024
-)
-
-# where is the source data?
-SOURCE_BASE <- "./source"
-
-# where to save the parquet?
-STORE <- "./store"
-
-####################################################
+source("config.R")
 
 if (
   REPORT_EXTENTS |> 
@@ -34,30 +18,28 @@ if (
 dir.create(STORE, showWarnings = FALSE)
 
 # all potential cost report files
-file_master_list <- bind_rows(
-    tibble( # 1996 format hospital files
-      ptype="hosp",year=1996:2011,fmt="96"
-    ),
-    tibble( # 2010 format hospital files
-      ptype="hosp",year=2010:FINAL_YEAR,fmt="10"
-    ),
-    tibble( # 1996 format SNF files
-      ptype="snf",year=1995:2012,fmt="96"
-    ),
-    tibble( # 2010 format SNF files
-      ptype="snf",year=2011:FINAL_YEAR,fmt="10"
-    )
+file_master_list <-
+  tribble(
+    ~ptype, ~year,            ~fmt,
+    "hosp", 1996:2011,       "96",
+    "hosp", 2010:FINAL_YEAR, "10",
+    "snf",  1995:2012,       "96",
+    "snf",  2011:FINAL_YEAR, "10"
   ) |>
+  mutate(
+    form = case_when(
+      ptype=="hosp" ~ "2552",
+      ptype=="snf"  ~ "2540"
+    )    
+  ) |>
+  unnest(year) |> # expand so there's one obs for each year
   mutate( # generate file names
     file=paste0(
-      SOURCE_BASE,"/",ptype,"_rpt",
-      case_when(
-        ptype=="hosp" ~ "2552",
-        ptype=="snf"  ~ "2540"
-      ),
-      "_",fmt,"_",year,".csv"
+      SOURCE_BASE,"/",ptype,"_rpt",form,"_",fmt,"_",year,".csv"
     )
-  )
+  ) |>
+  select(-form)
+
 
 # report CSV files to load
 files_rpt_csv <- file_master_list |>
@@ -70,7 +52,10 @@ files_rpt_csv <- file_master_list |>
   pull(file)
 
 # report parquet file to save
-file_rpt_pq = paste(STORE,"/rpt",sep="")
+file_rpt_pq = paste0(STORE,"/rpt")
+
+# delete the report parquet file if it already exists
+unlink(file_rpt_pq,recursive=TRUE)
 
 # set up connection to load CSV files
 rpt <- open_dataset(files_rpt_csv,format="csv",schema=schema(
@@ -127,6 +112,9 @@ process_long <- function(ftype) {
   
   # parquet file to save
   file_pq = paste(STORE,"/",ftype,sep="")
+  
+  # delete the parquet file if it already exists
+  unlink(file_pq,recursive=TRUE)
 
   # set up connection to load CSV files
   
