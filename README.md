@@ -1,27 +1,27 @@
-# CMS Hospital Cost Report (HCRIS) Data 1996-2024
-Here you'll find code to process the CMS hospital cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 1996-2024.
+# CMS Hospital and SNF Cost Report (HCRIS) Data
+Here you'll find code to process the CMS cost report data, called HCRIS (Healthcare Cost Report Information System). The output includes all cost reports from 1996-2025 for hospitals and 1995-2025 for SNFs.
 
-**I have rewritten this code in R. While I've started using this code and data in my own work, please review the output carefully. You may want to think of it as beta testing!**
+**I have rewritten the code to process both the hospital and SNF cost reports, and all code is now in the R language. This is alpha code! Review all output carefully.**
 
 For more information on the data, see the NBER site:
 
 http://www.nber.org/data/hcris.html
 
-The code produces two datasets. In one, `hcris_merged.Rdata`, each record is a hospital cost report. Hospitals can file multiple cost reports in the same year, covering different periods. The coverage periods will also depend on the hospital's fiscal year, with some hospitals' fiscal years beginning earlier in the year and others later in the year.
+The code produces report-level and provider year-level datasets for hospitals and for SNFs. In `hosp_rpt.Rdata` and `snf_rpt.Rdata`, each record is a cost report. Providers can file multiple cost reports in the same year, covering different periods. The coverage periods will also depend on the provider's fiscal year, with some providers' fiscal years beginning earlier in the year and others later in the year.
 
-Thus, the second dataset, `hcris_merged_hospyear.Rdata`, attempts to deal with this issue by constructing synthetic calendar year data. For variables that are flows, it takes weighted sums over the cost reports, with the weights equal to the fraction of the cost report that fell into the calendar year (the weights are not normalized). For variables that are stocks or something like stocks (e.g. bed counts and the cost-to-charge ratio), it takes a weighted average, with weights equal to the fraction of the year covered by the report and normalized to sum to 1.
+Thus, the other datasets, `hosp_year.Rdata` and `snf_year.Rdata`, attempt to deal with this issue by constructing synthetic calendar year data. For variables that are flows, they take weighted sums over the cost reports, with the weights equal to the fraction of the cost report that fell into the calendar year (the weights are not normalized). For variables that are stocks or something like stocks (e.g. bed counts and the cost-to-charge ratio), they take a weighted average, with weights equal to the fraction of the year covered by the report and normalized to sum to 1.
 
 # Cautionary notes!
 * **The reports for the most recent year of data are typically very incomplete!**
-* **The hospital-year records for the most recent year or two of the data may be very incomplete!** These records are still available in the file. Check the `flag_short` variable (described below).
+* **The provider-year records for the most recent year or two of the data may be very incomplete!** These records are still available in the file. Check the `flag_short` variable (described below).
 * Cost report data is notoriously noisy and mis-measured. I strongly advise that you pre-process it to remove bizarre values, or that you use analytic methods that are less sensitive to outliers (e.g. quantile regression, trimming/winsorizing the outcome before linear regression, etc.).
-* **The uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
+* **The hospital uncompensated care variables are untested.** Reporting of uncompensated care has changed over time. I attempted to create harmonized series of uncompensated care charges and costs, but you should make sure that my definitions match the approach that you actually want to use.
 * The data includes my best attempt to calculate the Medicare inpatient operating cost-to-charge ratio (`ccr_prog`), but I give no guarantees it's correct.
-* In the synthetic calendar year data, sometimes a hospital doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
-* Because I process cost reports from 1996-2024 source files, many hospitals have incomplete calendar year coverage in the starting and terminal years (as the relevant cost reports were in / will be in 1995 or 2025 data). As a result, `hcris_merged_hospyear.dta` only includes calendar years 1997-2023. *2023 data in the hospital-year file is about 5% incomplete*.
+* In the synthetic calendar year data, sometimes a provider doesn't have cost reports with enough days to cover the full year period. These observations have `flag_short` set to 1. In other cases, the cost reports have too many days, indicating that there were overlapping reports. These observations have `flag_long` set to 1.
+* Many providers will have incomplete calendar year coverage in the starting and terminal source data years that you are loading (as the relevant cost reports for the calendar years are in source data years outside the window being loaded). As a result, `hosp_year.Rdata` and `snf_year.Rdata` only include calendar years starting one year after the source data begins and ending one year before the source data ends.
 * Sometimes values are missing in the original cost report data. In the synthetic calendar year data, a value is set to NA if any embodied cost report had a missing value. **Note:** dollar variables (e.g. costs, charges, etc.) are recoded to 0 in the report-level data. These values will therefore never be missing in the synthetic calendar year data. See the notes on adding new variables for more details.
 
-# Download the processed data
+# Download the processed data (NOTE: not yet updated)
 
 The processed cost report data is online at:
 
@@ -32,23 +32,21 @@ Includes report level data (`hcris_rpt.Rdata`), 1996-2024 and synthetic calendar
 # Instructions for processing the data yourself
 1. Download the repository using the 'Clone or download' link on github, or clone this repository with the git command:
 `git clone https://github.com/asacarny/hospital-cost-reports.git`
-1. Download the source data from CMS and put it into the `source/` subfolder. I recomend using the shell script to automatically download the files from the CMS website. Mac and Linux users should be able to run this with little issue. Windows users will need to install Cygwin. You will need `wget` and `unzip` installed.
-	- Edit the file `download_source.sh` to set your start/end year.
-	- Next, open a terminal, `cd` to your repository folder, and run `bash download_source.sh`.
-	- Import the files to parquet format. Edit the file `import-source-cms.R` to set the same start/end year. In R, set the working directory to the repository and run `import-source-cms.do`.
-1. Edit the `hcris.R` file so that the start/end years match the years of data you downloaded in the previous step.
-1. In R, set the working directory to the repository, and run `hcris.do`
+1. Edit the `config.R` file to set the extents of data you want to download and process
+1. In R, set the working directory to the repository.
+1. Run the following files in this order: `download-source.R`, `import-source.R`, `process-reports.R`
 
 # Adding new variables
 
 These datasets only include a handful of cost report variables. To update the code to extract more variables, here are some tips.
 
-* CMS provides documentation for the [2010 format](http://www.cms.gov/Regulations-and-Guidance/Guidance/Manuals/Downloads/P152_40.zip) and [1996 format](http://www.cms.gov/Regulations-and-Guidance/Guidance/Manuals/Downloads/P152_36.zip) files.
-* If you want to extract a new variable, you'll need to know the worksheet, row, and column in which it appears. One shortcut I've used: search for a hospital on https://www.costreportdata.com/search.php and view one of the reports. The website won't show you any real values unless you pay, but the visualization here should be enough.
+* For hospital cost reports, CMS provides documentation for the [2010 format](https://www.cms.gov/regulations-and-guidance/guidance/manuals/downloads/p152_40.zip) and [1996 format](https://www.cms.gov/regulations-and-guidance/guidance/manuals/downloads/p152_36.zip) files.
+* For SNF cost reports, CMS provides documentation for the [2010 format](https://www.cms.gov/regulations-and-guidance/guidance/manuals/downloads/p152_41.zip) and [1996 format](https://www.cms.gov/regulations-and-guidance/guidance/manuals/downloads/p152_35.zip) files.
+* If you want to extract a new variable, you'll need to know the worksheet, row, and column in which it appears. One shortcut I've used for hospitals: search for a hospital on https://www.costreportdata.com/search.php and view one of the reports. The website won't show you any real values unless you pay, but the visualization here should be enough.
 * Keep in mind that the cost report format changed around 2010 and so there are some years with reports in both formats. If you want a panel that goes back to around that time, you'll need to figure out the variable's worksheet, row, and column in both the 1996 and 2010 formats.
-* Once you know the worksheet, row, and column of the variable, open up `lookup.xlsx` and add the info as a new row to the worksheet `Lookup Table`. Make sure that `clmn_num` and `line_num_start` are stored as text format (i.e. the leading zeroes should appear). Set `fmt` to `10` if the variable is from 2010 format reports and `96` if it's from 1996 format reports. Make sure to set `enabled` to 1.
+* Once you know the worksheet, row, and column of the variable, open up `lookup.xlsx` and add the info as a new row to the worksheet `Lookup Table`. Set `ptype` to `hosp` or `snf` if this is for hospitals or SNFs, respectively. Make sure that `clmn_num` and `line_num_start` are stored as text format (i.e. the leading zeroes should appear). Set `fmt` to `10` if the variable is from 2010 format reports and `96` if it's from 1996 format reports. Make sure to set `enabled` to 1.
 * If you would like the variable to sum over consecutive cost report lines, fill in a value for `line_num_end`. For instance, the lookup file includes an entry for `icu_beds` with `line_num_start=00800` and `line_num_end=00899`, ensuring that the variable sums ICU beds from line 8 and all its subscripts. If you leave `line_num_end` blank, the code just loads the line given by `line_num_start`.
-* If you would like the variable to sum over non-consecutive lines, add additional entries to the table with the same `rec` and `fmt`. For an example, see  `othspec_beds` for 1996 format reports in the lookup table.
+* If you would like the variable to sum over non-consecutive lines, add additional entries to the table with the same `ptype`, `rec` and `fmt`. For an example, see  `othspec_beds` for 1996 format reports in the lookup table.
 * Finally, add a new row to the worksheet `Type and Label`. Note the column `type`, for which you should put one of the below four options:
   1. `stock` - in the synthetic calendar-year dataset, this will produce a variable with the weighted average across all the cost reports covering that year. The weights equal to the fraction of the year covered by the report. If any of the values in the collection of reports being aggregated over was NA, the variable is set to NA.
   1. `flow` - in the synthetic calendar-year dataset, this variable is produced by scaling its value in each of the hospital's cost reports by the fraction of that report that fell into the year. Then, it sums the scaled values. If any of the values in the collection of reports being summed over was NA, the variable is set to NA.
@@ -57,6 +55,11 @@ These datasets only include a handful of cost report variables. To update the co
 * An additional note about the `dollar_flow` approach: since each source data year contains reports spanning multiple calendar years, *all* reports in a source data year with partial coverage of a new variable will have missing values zeroed out. That includes reports for periods before hospitals had to submit that variable, for which missing is likely more appropriate.
 
 # Change log
+March 26, 2026
+* Rewrite the code to also load cost reports for SNFs
+* Rewrite the downloader code in R
+* All scripts now use `config.R` to set configuration options
+
 June 27, 2025
 
 * Switch over to R code! This does bring some other changes, so please re-read the documentation carefully
