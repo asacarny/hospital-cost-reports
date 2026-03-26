@@ -1,13 +1,13 @@
 # Configuration for cost report processing
 
 # Last year cost reports are available
-FINAL_YEAR <- 2024
+FINAL_YEAR <- 2025
 
 # Process cost reports from these years
 REPORT_EXTENTS <- tribble(
   ~ptype,  ~start_year,  ~end_year,
-  "hosp",     1996,         2024,
-  "snf",      1995,         2024
+  "hosp",     1996,         FINAL_YEAR,
+  "snf",      1995,         FINAL_YEAR
 )
 
 # Where is the source data?
