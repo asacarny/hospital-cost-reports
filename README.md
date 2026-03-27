@@ -31,7 +31,7 @@ Includes report level data (`hcris_rpt.Rdata`), 1996-2024 and synthetic calendar
 
 # Instructions for processing the data yourself
 1. Download the repository using the 'Clone or download' link on github, or clone this repository with the git command:
-`git clone https://github.com/asacarny/hospital-cost-reports.git`
+`git clone -b add-snf https://github.com/asacarny/hospital-cost-reports.git`
 1. Edit the `config.R` file to set the extents of data you want to download and process
 1. In R, set the working directory to the repository.
 1. Run the following files in this order: `download-source.R`, `import-source.R`, `process-reports.R`
